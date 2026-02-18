@@ -15,7 +15,8 @@ from contextlib import contextmanager
 from typing import Optional, List, Dict
 from datetime import datetime
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "repolm.db")
+_DATA_DIR = os.environ.get("DATA_DIR", os.path.dirname(__file__))
+DB_PATH = os.path.join(_DATA_DIR, "repolm.db")
 
 
 def get_db():
