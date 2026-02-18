@@ -13,6 +13,7 @@ import hashlib
 import secrets
 from contextlib import contextmanager
 from typing import Optional, List, Dict
+from datetime import datetime
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "repolm.db")
 
@@ -46,6 +47,25 @@ def init_db():
             avatar_url TEXT,
             created_at REAL DEFAULT (unixepoch()),
             last_login REAL DEFAULT (unixepoch())
+        );
+
+        CREATE TABLE IF NOT EXISTS course_packs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            slug TEXT UNIQUE NOT NULL,
+            description TEXT,
+            repo_url TEXT,
+            price_cents INTEGER DEFAULT 2900,
+            created_at REAL DEFAULT (unixepoch())
+        );
+
+        CREATE TABLE IF NOT EXISTS purchased_packs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            pack_id INTEGER NOT NULL REFERENCES course_packs(id),
+            stripe_payment_id TEXT,
+            purchased_at REAL DEFAULT (unixepoch()),
+            UNIQUE(user_id, pack_id)
         );
 
         CREATE TABLE IF NOT EXISTS sessions (
@@ -97,6 +117,19 @@ def init_db():
         );
         CREATE INDEX IF NOT EXISTS idx_chats_repo ON chats(repo_id);
         """)
+        # Migration: add subscription columns to users if missing
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
+        migrations = {
+            "stripe_customer_id": "ALTER TABLE users ADD COLUMN stripe_customer_id TEXT",
+            "subscription_status": "ALTER TABLE users ADD COLUMN subscription_status TEXT DEFAULT 'none'",
+            "subscription_id": "ALTER TABLE users ADD COLUMN subscription_id TEXT",
+            "plan": "ALTER TABLE users ADD COLUMN plan TEXT DEFAULT 'free'",
+            "repos_this_month": "ALTER TABLE users ADD COLUMN repos_this_month INTEGER DEFAULT 0",
+            "month_reset": "ALTER TABLE users ADD COLUMN month_reset TEXT",
+        }
+        for col, sql in migrations.items():
+            if col not in cols:
+                conn.execute(sql)
 
 
 # ── Users ──
@@ -228,6 +261,54 @@ def get_chats(repo_id: int, limit: int = 50) -> list:
         rows = conn.execute("SELECT * FROM chats WHERE repo_id=? ORDER BY created_at ASC LIMIT ?",
                             (repo_id, limit)).fetchall()
         return [dict(r) for r in rows]
+
+
+# ── Subscriptions ──
+
+def update_subscription(user_id: int, **kwargs):
+    """Update subscription fields for a user. Pass any of: stripe_customer_id, subscription_id, subscription_status, plan."""
+    if not kwargs:
+        return
+    sets = []
+    vals = []
+    for k, v in kwargs.items():
+        sets.append(f"{k}=?")
+        vals.append(v)
+    vals.append(user_id)
+    with db() as conn:
+        conn.execute(f"UPDATE users SET {', '.join(sets)} WHERE id=?", vals)
+
+
+def get_subscription(user_id: int) -> Optional[dict]:
+    with db() as conn:
+        row = conn.execute(
+            "SELECT plan, subscription_status, subscription_id, stripe_customer_id, repos_this_month, month_reset FROM users WHERE id=?",
+            (user_id,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def increment_repo_count(user_id: int):
+    current_month = datetime.utcnow().strftime("%Y-%m")
+    with db() as conn:
+        row = conn.execute("SELECT repos_this_month, month_reset FROM users WHERE id=?", (user_id,)).fetchone()
+        if row and row["month_reset"] == current_month:
+            conn.execute("UPDATE users SET repos_this_month = repos_this_month + 1 WHERE id=?", (user_id,))
+        else:
+            conn.execute("UPDATE users SET repos_this_month = 1, month_reset = ? WHERE id=?", (current_month, user_id))
+
+
+def check_repo_limit(user_id: int) -> bool:
+    """Returns True if user can add a repo, False if at limit."""
+    sub = get_subscription(user_id)
+    if not sub:
+        return True  # no user record, allow
+    if sub.get("plan") == "pro" and sub.get("subscription_status") == "active":
+        return True  # pro users unlimited
+    current_month = datetime.utcnow().strftime("%Y-%m")
+    if sub.get("month_reset") != current_month:
+        return True  # new month, reset
+    return (sub.get("repos_this_month") or 0) < 3
 
 
 def get_db_stats() -> dict:

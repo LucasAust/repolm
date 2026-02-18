@@ -21,10 +21,12 @@ from ingest import ingest_repo, repo_to_text, RepoData
 from summarize import call_llm
 import db as database
 from auth import router as auth_router, get_current_user
+from payments import router as payments_router
 
 app = FastAPI(title="RepoLM")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.include_router(auth_router)
+app.include_router(payments_router)
 
 # ── Store ──
 repos = {}   # repo_id -> { data, text, files, status, message }
@@ -42,6 +44,17 @@ RATE_LIMITS = {
 }
 rate_store = defaultdict(list)  # "type:ip" -> [timestamps]
 API_KEY = os.environ.get("REPOLM_API_KEY")
+
+def is_pro_user(request: Request) -> bool:
+    """Check if the current user has an active Pro subscription."""
+    user = get_current_user(request)
+    if not user:
+        return False
+    sub = database.get_subscription(user["id"])
+    if not sub:
+        return False
+    return sub.get("plan") == "pro" and sub.get("subscription_status") == "active"
+
 
 def check_rate_limit(request: Request, action: str) -> bool:
     """Returns True if rate limited."""
@@ -280,6 +293,13 @@ async def add_repo(request: Request):
     # Basic URL validation
     if "github.com" not in url and "gitlab.com" not in url:
         return JSONResponse({"error": "Please provide a valid GitHub or GitLab URL"}, 400)
+    # Check repo limit for authenticated free users
+    user = get_current_user(request)
+    if user:
+        if not database.check_repo_limit(user["id"]):
+            return JSONResponse({"error": "upgrade_required", "feature": "repo_limit", "message": "Free plan limited to 3 repos/month"}, 402)
+        database.increment_repo_count(user["id"])
+
     repo_id = str(uuid.uuid4())[:8]
     repos[repo_id] = {"status": "queued", "message": "Starting...", "files": [], "text": "", "data": {}}
     threading.Thread(target=run_ingest, args=(repo_id, url), daemon=True).start()
@@ -303,6 +323,13 @@ async def upload_folder(request: Request):
     
     if not files_data:
         return JSONResponse({"error": "No files uploaded"}, 400)
+
+    # Check repo limit for authenticated free users
+    user = get_current_user(request)
+    if user:
+        if not database.check_repo_limit(user["id"]):
+            return JSONResponse({"error": "upgrade_required", "feature": "repo_limit", "message": "Free plan limited to 3 repos/month"}, 402)
+        database.increment_repo_count(user["id"])
 
     repo_id = str(uuid.uuid4())[:8]
     repos[repo_id] = {"status": "queued", "message": "Processing upload...", "files": [], "text": "", "data": {}}
@@ -444,6 +471,9 @@ async def chat(repo_id: str, request: Request):
     repo = repos.get(repo_id)
     if not repo or repo["status"] != "ready":
         return JSONResponse({"error": "Repo not ready"}, 400)
+    # Immersive mode (selection-based) requires Pro
+    if selection and file_context and not is_pro_user(request):
+        return JSONResponse({"error": "upgrade_required", "feature": "immersive"}, 402)
     if selection and file_context:
         system = get_system_prompt(SELECTION_SYSTEM, depth, expertise)
         file_content = ""
@@ -470,6 +500,9 @@ async def generate(repo_id: str, request: Request):
     kind = body.get("kind", "overview")
     depth = body.get("depth", "high-level")
     expertise = body.get("expertise", "amateur")
+    # Podcast and slides require Pro
+    if kind in ("podcast", "slides") and not is_pro_user(request):
+        return JSONResponse({"error": "upgrade_required", "feature": kind}, 402)
     job_id = str(uuid.uuid4())[:8]
     jobs[job_id] = {"status": "queued", "message": "Starting...", "result": None}
     threading.Thread(target=run_generate, args=(job_id, repo_id, kind, depth, expertise), daemon=True).start()
@@ -484,6 +517,8 @@ async def get_job(job_id: str):
 
 @app.post("/api/podcast-audio")
 async def podcast_audio(request: Request):
+    if not is_pro_user(request):
+        return JSONResponse({"error": "upgrade_required", "feature": "podcast_audio"}, 402)
     body = await request.json()
     script = body.get("script", "")
     if not script:
@@ -792,6 +827,33 @@ APP_PAGE = r"""<!DOCTYPE html>
 
 <div x-data="repolm()" x-init="init()" x-cloak class="h-screen flex flex-col">
 
+<!-- Checkout success banner -->
+<div x-show="checkoutSuccess" x-transition class="fixed top-0 left-0 right-0 z-50 bg-green-600 text-white text-center py-3 text-sm font-medium">
+    🎉 Welcome to Pro! You now have unlimited repos, podcasts, slides & more.
+</div>
+
+<!-- Upgrade modal -->
+<div x-show="showUpgradeModal" x-transition class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" @click.self="showUpgradeModal=false">
+    <div class="bg-gray-900 border border-gray-700 rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl">
+        <div class="text-center">
+            <div class="text-4xl mb-4">⭐</div>
+            <h3 class="text-2xl font-bold text-white mb-2">Upgrade to Pro</h3>
+            <p class="text-gray-400 mb-6">Unlimited repos, podcasts, slides & more — <span class="text-white font-semibold">$9/mo</span></p>
+            <div class="text-left bg-gray-800/50 rounded-xl p-4 mb-6 space-y-2 text-sm">
+                <div class="flex items-center gap-2 text-gray-300">✅ Unlimited repos per month</div>
+                <div class="flex items-center gap-2 text-gray-300">✅ Podcast scripts & audio</div>
+                <div class="flex items-center gap-2 text-gray-300">✅ Slide deck generation</div>
+                <div class="flex items-center gap-2 text-gray-300">✅ Immersive code exploration</div>
+                <div class="flex items-center gap-2 text-gray-300">✅ Priority processing</div>
+            </div>
+            <button @click="showUpgradeModal=false; startCheckout()" class="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-semibold py-3 rounded-xl transition mb-3">
+                Subscribe — $9/mo
+            </button>
+            <button @click="showUpgradeModal=false" class="text-sm text-gray-500 hover:text-gray-300">Maybe later</button>
+        </div>
+    </div>
+</div>
+
 <!-- Top bar -->
 <div class="h-12 border-b border-gray-800 flex items-center px-4 gap-4 shrink-0 bg-gray-950/80 backdrop-blur">
     <a href="/" class="text-lg font-bold hover:opacity-80"><span class="text-purple-400">Repo</span>LM</a>
@@ -823,11 +885,16 @@ APP_PAGE = r"""<!DOCTYPE html>
         <template x-if="savedDbId">
             <span class="text-xs text-green-400">✓ Saved</span>
         </template>
+        <!-- Upgrade button for free users -->
+        <template x-if="user && !isPro">
+            <button @click="startCheckout()" class="text-xs bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white px-3 py-1.5 rounded-lg flex items-center gap-1">⭐ Upgrade</button>
+        </template>
         <!-- Auth -->
         <template x-if="user">
             <div class="flex items-center gap-2 text-xs">
                 <img :src="user.avatar_url" class="w-6 h-6 rounded-full">
                 <span class="text-gray-300" x-text="user.username"></span>
+                <template x-if="isPro"><span class="bg-purple-600 text-white text-[10px] px-1.5 py-0.5 rounded font-bold">PRO</span></template>
                 <a href="/auth/logout" class="text-gray-500 hover:text-gray-300">Logout</a>
             </div>
         </template>
@@ -1069,13 +1136,15 @@ APP_PAGE = r"""<!DOCTYPE html>
                 </button>
                 <button @click="doGenerate('podcast')" :disabled="generating || exampleLoaded"
                     class="w-full text-left bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg p-3 transition disabled:opacity-50">
-                    <div class="flex items-center gap-2 text-sm font-medium">🎙️ Podcast Script</div>
+                    <div class="flex items-center gap-2 text-sm font-medium">🎙️ Podcast Script <span x-show="!isPro" class="text-yellow-500 text-xs">🔒</span></div>
                     <p class="text-xs text-gray-500 mt-1">Two-host conversation about the codebase</p>
+                    <p x-show="!isPro" class="text-[10px] text-purple-400 mt-1">Pro feature</p>
                 </button>
                 <button @click="doGenerate('slides')" :disabled="generating || exampleLoaded"
                     class="w-full text-left bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg p-3 transition disabled:opacity-50">
-                    <div class="flex items-center gap-2 text-sm font-medium">📊 Slide Deck</div>
+                    <div class="flex items-center gap-2 text-sm font-medium">📊 Slide Deck <span x-show="!isPro" class="text-yellow-500 text-xs">🔒</span></div>
                     <p class="text-xs text-gray-500 mt-1">Presentation-ready breakdown</p>
+                    <p x-show="!isPro" class="text-[10px] text-purple-400 mt-1">Pro feature</p>
                 </button>
             </div>
             
@@ -1134,12 +1203,23 @@ function repolm() {
         authChecked: false,
         savedRepos: [],
         savedDbId: null,
+        subscription: {plan:'free', subscription_status:'none', repos_this_month:0},
+        showUpgradeModal: false,
+        upgradeFeature: '',
+        checkoutSuccess: false,
+
+        get isPro() { return this.subscription.plan === 'pro' && this.subscription.subscription_status === 'active'; },
 
         init() {
             this.checkAuth();
             const params = new URLSearchParams(window.location.search);
             const exSlug = params.get('example');
             if (exSlug) this.loadExample(exSlug);
+            if (params.get('checkout') === 'success') {
+                this.checkoutSuccess = true;
+                window.history.replaceState({}, '', '/app');
+                setTimeout(() => this.checkoutSuccess = false, 5000);
+            }
         },
 
         async checkAuth() {
@@ -1147,9 +1227,33 @@ function repolm() {
                 const res = await fetch('/auth/me');
                 const data = await res.json();
                 this.user = data.user;
-                if (this.user) this.loadSavedRepos();
+                if (this.user) {
+                    this.loadSavedRepos();
+                    this.loadSubscription();
+                }
             } catch(e) {}
             this.authChecked = true;
+        },
+
+        async loadSubscription() {
+            try {
+                const res = await fetch('/api/my/subscription');
+                if (res.ok) this.subscription = await res.json();
+            } catch(e) {}
+        },
+
+        async startCheckout() {
+            try {
+                const res = await fetch('/api/checkout', {method:'POST'});
+                const data = await res.json();
+                if (data.url) window.location.href = data.url;
+                else if (data.error) alert(data.error);
+            } catch(e) { alert('Failed to start checkout'); }
+        },
+
+        handleUpgradeRequired(feature) {
+            this.upgradeFeature = feature;
+            this.showUpgradeModal = true;
         },
 
         async loadSavedRepos() {
@@ -1271,6 +1375,7 @@ function repolm() {
                     body: JSON.stringify({url})
                 });
                 const data = await res.json();
+                if (res.status === 402) { this.handleUpgradeRequired(data.feature); this.loadingRepo = false; return; }
                 if (data.error) { this.repoError = data.error; this.loadingRepo = false; return; }
                 this.repoId = data.repo_id;
                 this.pollRepo();
@@ -1376,6 +1481,7 @@ function repolm() {
                     body: JSON.stringify({message:text, depth:this.depth, expertise:this.expertise, selection:this.selectedText, file_path:this.currentFile})
                 });
                 const data = await res.json();
+                if (res.status === 402) { this.immersiveMessages.pop(); this.handleUpgradeRequired(data.feature); return; }
                 this.immersiveMessages.pop();
                 this.immersiveMessages.push({role:'assistant', text: data.response || data.error});
             } catch(e) {
@@ -1394,7 +1500,9 @@ function repolm() {
                     headers:{'Content-Type':'application/json'},
                     body: JSON.stringify({kind, depth:this.depth, expertise:this.expertise})
                 });
-                const {job_id} = await res.json();
+                const data = await res.json();
+                if (res.status === 402) { this.generating = false; this.handleUpgradeRequired(data.feature); return; }
+                const job_id = data.job_id;
                 const iv = setInterval(async () => {
                     try {
                         const r = await fetch(`/api/job/${job_id}`);
