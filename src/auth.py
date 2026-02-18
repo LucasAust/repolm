@@ -9,7 +9,7 @@ from typing import Optional
 import httpx
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import RedirectResponse
-from db import create_or_update_user, create_session, get_user_by_session, delete_session
+from db import create_or_update_user, create_session, get_user_by_session, delete_session, get_subscription, get_token_balance, has_ever_purchased
 
 router = APIRouter()
 
@@ -21,10 +21,26 @@ SESSION_COOKIE = "repolm_session"
 
 
 def get_current_user(request: Request) -> Optional[dict]:
-    token = request.cookies.get(SESSION_COOKIE)
+    # Check Bearer token first, then cookie
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+    else:
+        token = request.cookies.get(SESSION_COOKIE)
     if not token:
         return None
     return get_user_by_session(token)
+
+
+def get_user_plan(request: Request) -> str:
+    """Returns 'pro' or 'free'. Works for anonymous users too."""
+    user = get_current_user(request)
+    if not user:
+        return "free"
+    sub = get_subscription(user["id"])
+    if sub and sub.get("plan") == "pro" and sub.get("subscription_status") == "active":
+        return "pro"
+    return "free"
 
 
 @router.get("/auth/login")
@@ -93,5 +109,22 @@ async def me(request: Request):
     user = get_current_user(request)
     if not user:
         return {"user": None}
+    sub = get_subscription(user["id"])
+    plan = "free"
+    if sub and sub.get("plan") == "pro" and sub.get("subscription_status") == "active":
+        plan = "pro"
+    tokens = get_token_balance(user["id"])
+    purchased = has_ever_purchased(user["id"])
     return {"user": {"id": user["id"], "username": user["username"],
-                     "avatar_url": user["avatar_url"]}}
+                     "avatar_url": user["avatar_url"], "plan": plan,
+                     "tokens": tokens, "has_purchased": purchased}}
+
+
+@router.get("/auth/token")
+async def get_token(request: Request):
+    """Get API token for Bearer auth."""
+    token = request.cookies.get(SESSION_COOKIE)
+    user = get_current_user(request)
+    if not user or not token:
+        return JSONResponse({"error": "Not authenticated"}, 401)
+    return {"token": token}

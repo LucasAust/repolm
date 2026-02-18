@@ -117,7 +117,18 @@ def init_db():
         );
         CREATE INDEX IF NOT EXISTS idx_chats_repo ON chats(repo_id);
         """)
-        # Migration: add subscription columns to users if missing
+        conn.executescript("""
+        CREATE TABLE IF NOT EXISTS token_transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            amount INTEGER NOT NULL,
+            action TEXT NOT NULL,
+            description TEXT,
+            created_at REAL DEFAULT (unixepoch())
+        );
+        CREATE INDEX IF NOT EXISTS idx_token_tx_user ON token_transactions(user_id);
+        """)
+        # Migration: add columns to users if missing
         cols = {r[1] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
         migrations = {
             "stripe_customer_id": "ALTER TABLE users ADD COLUMN stripe_customer_id TEXT",
@@ -126,6 +137,8 @@ def init_db():
             "plan": "ALTER TABLE users ADD COLUMN plan TEXT DEFAULT 'free'",
             "repos_this_month": "ALTER TABLE users ADD COLUMN repos_this_month INTEGER DEFAULT 0",
             "month_reset": "ALTER TABLE users ADD COLUMN month_reset TEXT",
+            "tokens": "ALTER TABLE users ADD COLUMN tokens INTEGER DEFAULT 0",
+            "has_purchased": "ALTER TABLE users ADD COLUMN has_purchased INTEGER DEFAULT 0",
         }
         for col, sql in migrations.items():
             if col not in cols:
@@ -142,9 +155,12 @@ def create_or_update_user(github_id: int, username: str, email: str = None, avat
                          (username, email, avatar_url, row["id"]))
             return row["id"]
         else:
-            cur = conn.execute("INSERT INTO users (github_id, username, email, avatar_url) VALUES (?,?,?,?)",
+            cur = conn.execute("INSERT INTO users (github_id, username, email, avatar_url, tokens) VALUES (?,?,?,?,10)",
                                (github_id, username, email, avatar_url))
-            return cur.lastrowid
+            user_id = cur.lastrowid
+            conn.execute("INSERT INTO token_transactions (user_id, amount, action, description) VALUES (?,?,?,?)",
+                         (user_id, 10, "signup", "Free signup tokens"))
+            return user_id
 
 
 def create_session(user_id: int, ttl_days: int = 30) -> str:
@@ -260,6 +276,51 @@ def get_chats(repo_id: int, limit: int = 50) -> list:
     with db() as conn:
         rows = conn.execute("SELECT * FROM chats WHERE repo_id=? ORDER BY created_at ASC LIMIT ?",
                             (repo_id, limit)).fetchall()
+        return [dict(r) for r in rows]
+
+
+# ── Tokens ──
+
+def get_token_balance(user_id: int) -> int:
+    with db() as conn:
+        row = conn.execute("SELECT tokens FROM users WHERE id=?", (user_id,)).fetchone()
+        return row["tokens"] if row else 0
+
+
+def spend_tokens(user_id: int, amount: int, description: str) -> bool:
+    """Deduct tokens. Returns True if successful, False if insufficient."""
+    with db() as conn:
+        row = conn.execute("SELECT tokens FROM users WHERE id=?", (user_id,)).fetchone()
+        if not row or row["tokens"] < amount:
+            return False
+        conn.execute("UPDATE users SET tokens = tokens - ? WHERE id=?", (amount, user_id))
+        conn.execute("INSERT INTO token_transactions (user_id, amount, action, description) VALUES (?,?,?,?)",
+                     (user_id, -amount, "spend", description))
+        return True
+
+
+def add_tokens(user_id: int, amount: int, description: str):
+    with db() as conn:
+        conn.execute("UPDATE users SET tokens = tokens + ? WHERE id=?", (amount, user_id))
+        conn.execute("INSERT INTO token_transactions (user_id, amount, action, description) VALUES (?,?,?,?)",
+                     (user_id, amount, "purchase", description))
+
+
+def has_ever_purchased(user_id: int) -> bool:
+    with db() as conn:
+        row = conn.execute("SELECT has_purchased FROM users WHERE id=?", (user_id,)).fetchone()
+        return bool(row["has_purchased"]) if row else False
+
+
+def set_has_purchased(user_id: int):
+    with db() as conn:
+        conn.execute("UPDATE users SET has_purchased = 1 WHERE id=?", (user_id,))
+
+
+def get_token_transactions(user_id: int, limit: int = 20) -> list:
+    with db() as conn:
+        rows = conn.execute("SELECT * FROM token_transactions WHERE user_id=? ORDER BY created_at DESC LIMIT ?",
+                            (user_id, limit)).fetchall()
         return [dict(r) for r in rows]
 
 

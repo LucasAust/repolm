@@ -24,6 +24,10 @@ from auth import router as auth_router, get_current_user
 from payments import router as payments_router
 
 app = FastAPI(title="RepoLM")
+
+# ── Token costs ──
+TOKEN_COSTS = {"ingest": 5, "overview": 10, "chat": 2, "slides": 15, "podcast": 20, "audio": 30, "immersive": 3}
+ADSENSE_CLIENT_ID = os.environ.get("ADSENSE_CLIENT_ID", "")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.include_router(auth_router)
 app.include_router(payments_router)
@@ -278,7 +282,7 @@ async def landing():
 
 @app.get("/app", response_class=HTMLResponse)
 async def app_page():
-    return APP_PAGE
+    return APP_PAGE.replace("__ADSENSE_CLIENT_ID__", ADSENSE_CLIENT_ID)
 
 @app.post("/api/repo")
 async def add_repo(request: Request):
@@ -293,17 +297,19 @@ async def add_repo(request: Request):
     # Basic URL validation
     if "github.com" not in url and "gitlab.com" not in url:
         return JSONResponse({"error": "Please provide a valid GitHub or GitLab URL"}, 400)
-    # Check repo limit for authenticated free users
+    # Check token balance for authenticated users
     user = get_current_user(request)
+    cost = TOKEN_COSTS["ingest"]
     if user:
-        if not database.check_repo_limit(user["id"]):
-            return JSONResponse({"error": "upgrade_required", "feature": "repo_limit", "message": "Free plan limited to 3 repos/month"}, 402)
-        database.increment_repo_count(user["id"])
+        balance = database.get_token_balance(user["id"])
+        if balance < cost:
+            return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
+        database.spend_tokens(user["id"], cost, "Ingest repo")
 
     repo_id = str(uuid.uuid4())[:8]
     repos[repo_id] = {"status": "queued", "message": "Starting...", "files": [], "text": "", "data": {}}
     threading.Thread(target=run_ingest, args=(repo_id, url), daemon=True).start()
-    return {"repo_id": repo_id}
+    return {"repo_id": repo_id, "token_cost": cost}
 
 @app.post("/api/upload")
 async def upload_folder(request: Request):
@@ -324,17 +330,19 @@ async def upload_folder(request: Request):
     if not files_data:
         return JSONResponse({"error": "No files uploaded"}, 400)
 
-    # Check repo limit for authenticated free users
+    # Check token balance
     user = get_current_user(request)
+    cost = TOKEN_COSTS["ingest"]
     if user:
-        if not database.check_repo_limit(user["id"]):
-            return JSONResponse({"error": "upgrade_required", "feature": "repo_limit", "message": "Free plan limited to 3 repos/month"}, 402)
-        database.increment_repo_count(user["id"])
+        balance = database.get_token_balance(user["id"])
+        if balance < cost:
+            return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
+        database.spend_tokens(user["id"], cost, "Upload folder")
 
     repo_id = str(uuid.uuid4())[:8]
     repos[repo_id] = {"status": "queued", "message": "Processing upload...", "files": [], "text": "", "data": {}}
     threading.Thread(target=run_upload_ingest, args=(repo_id, files_data), daemon=True).start()
-    return {"repo_id": repo_id}
+    return {"repo_id": repo_id, "token_cost": cost}
 
 
 def run_upload_ingest(repo_id, files_data):
@@ -471,9 +479,14 @@ async def chat(repo_id: str, request: Request):
     repo = repos.get(repo_id)
     if not repo or repo["status"] != "ready":
         return JSONResponse({"error": "Repo not ready"}, 400)
-    # Immersive mode (selection-based) requires Pro
-    if selection and file_context and not is_pro_user(request):
-        return JSONResponse({"error": "upgrade_required", "feature": "immersive"}, 402)
+    # Token check
+    user = get_current_user(request)
+    is_immersive = bool(selection and file_context)
+    cost = TOKEN_COSTS["immersive"] if is_immersive else TOKEN_COSTS["chat"]
+    if user:
+        balance = database.get_token_balance(user["id"])
+        if balance < cost:
+            return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
     if selection and file_context:
         system = get_system_prompt(SELECTION_SYSTEM, depth, expertise)
         file_content = ""
@@ -490,7 +503,10 @@ async def chat(repo_id: str, request: Request):
         prompt = f"Repository context:\n{text}\n\nUser question: {message}"
     try:
         result = call_llm(system, prompt)
-        return {"response": result}
+        if user:
+            database.spend_tokens(user["id"], cost, "Immersive question" if is_immersive else "Chat message")
+        new_balance = database.get_token_balance(user["id"]) if user else None
+        return {"response": result, "token_cost": cost, "balance": new_balance}
     except Exception as e:
         return JSONResponse({"error": f"AI generation failed: {str(e)}"}, 500)
 
@@ -500,9 +516,14 @@ async def generate(repo_id: str, request: Request):
     kind = body.get("kind", "overview")
     depth = body.get("depth", "high-level")
     expertise = body.get("expertise", "amateur")
-    # Podcast and slides require Pro
-    if kind in ("podcast", "slides") and not is_pro_user(request):
-        return JSONResponse({"error": "upgrade_required", "feature": kind}, 402)
+    # Token check
+    cost = TOKEN_COSTS.get(kind, 10)
+    user = get_current_user(request)
+    if user:
+        balance = database.get_token_balance(user["id"])
+        if balance < cost:
+            return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
+        database.spend_tokens(user["id"], cost, f"Generate {kind}")
     job_id = str(uuid.uuid4())[:8]
     jobs[job_id] = {"status": "queued", "message": "Starting...", "result": None}
     threading.Thread(target=run_generate, args=(job_id, repo_id, kind, depth, expertise), daemon=True).start()
@@ -517,8 +538,13 @@ async def get_job(job_id: str):
 
 @app.post("/api/podcast-audio")
 async def podcast_audio(request: Request):
-    if not is_pro_user(request):
-        return JSONResponse({"error": "upgrade_required", "feature": "podcast_audio"}, 402)
+    user = get_current_user(request)
+    cost = TOKEN_COSTS["audio"]
+    if user:
+        balance = database.get_token_balance(user["id"])
+        if balance < cost:
+            return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
+        database.spend_tokens(user["id"], cost, "Podcast audio generation")
     body = await request.json()
     script = body.get("script", "")
     if not script:
@@ -743,6 +769,15 @@ body{background:#09090b;color:#e5e7eb;font-family:system-ui,-apple-system,sans-s
     </div>
 </section>
 
+<!-- Ad on landing page -->
+<section class="max-w-5xl mx-auto px-6 py-2">
+    <div class="ad-slot ad-banner flex items-center justify-center" style="background:#111827;border:1px solid #1f2937;border-radius:8px;height:90px;text-align:center">
+        <span style="position:absolute;top:2px;right:6px;font-size:9px;color:#4b5563">Ad</span>
+        <ins class="adsbygoogle" style="display:inline-block;width:728px;height:90px" data-ad-client="ca-pub-XXXX" data-ad-slot="LANDING_AD_SLOT"></ins>
+        <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+    </div>
+</section>
+
 <!-- Examples -->
 <section class="max-w-5xl mx-auto px-6 py-16" id="examples" x-data="examplesData()" x-init="loadExamples()">
     <h2 class="text-2xl font-bold mb-2 text-center">Try these</h2>
@@ -821,7 +856,15 @@ APP_PAGE = r"""<!DOCTYPE html>
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
 .skeleton{background:linear-gradient(90deg,#1f2937 25%,#374151 50%,#1f2937 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:4px}
+.ad-slot{background:#111827;border:1px solid #1f2937;border-radius:8px;text-align:center;overflow:hidden;position:relative}
+.ad-slot .ad-label{position:absolute;top:2px;right:6px;font-size:9px;color:#4b5563;z-index:1}
+.ad-banner{height:90px;width:100%}
+.ad-sidebar{min-height:250px;width:100%}
+.ad-inline{height:60px;width:100%;margin:8px 0}
 </style>
+<!-- Google AdSense -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXX" crossorigin="anonymous"></script>
+<script>window.ADSENSE_CLIENT_ID = '__ADSENSE_CLIENT_ID__';</script>
 </head>
 <body class="bg-gray-950 text-gray-100 h-screen overflow-hidden">
 
@@ -829,28 +872,52 @@ APP_PAGE = r"""<!DOCTYPE html>
 
 <!-- Checkout success banner -->
 <div x-show="checkoutSuccess" x-transition class="fixed top-0 left-0 right-0 z-50 bg-green-600 text-white text-center py-3 text-sm font-medium">
-    🎉 Welcome to Pro! You now have unlimited repos, podcasts, slides & more.
+    🎉 Tokens added! Your balance has been updated.
 </div>
 
-<!-- Upgrade modal -->
-<div x-show="showUpgradeModal" x-transition class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" @click.self="showUpgradeModal=false">
-    <div class="bg-gray-900 border border-gray-700 rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl">
+<!-- Token shop modal -->
+<div x-show="showTokenShop" x-transition class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" @click.self="showTokenShop=false">
+    <div class="bg-gray-900 border border-gray-700 rounded-2xl p-8 max-w-lg w-full mx-4 shadow-2xl">
         <div class="text-center">
-            <div class="text-4xl mb-4">⭐</div>
-            <h3 class="text-2xl font-bold text-white mb-2">Upgrade to Pro</h3>
-            <p class="text-gray-400 mb-6">Unlimited repos, podcasts, slides & more — <span class="text-white font-semibold">$9/mo</span></p>
-            <div class="text-left bg-gray-800/50 rounded-xl p-4 mb-6 space-y-2 text-sm">
-                <div class="flex items-center gap-2 text-gray-300">✅ Unlimited repos per month</div>
-                <div class="flex items-center gap-2 text-gray-300">✅ Podcast scripts & audio</div>
-                <div class="flex items-center gap-2 text-gray-300">✅ Slide deck generation</div>
-                <div class="flex items-center gap-2 text-gray-300">✅ Immersive code exploration</div>
-                <div class="flex items-center gap-2 text-gray-300">✅ Priority processing</div>
+            <div class="text-4xl mb-4">🪙</div>
+            <h3 class="text-2xl font-bold text-white mb-2">Buy Tokens</h3>
+            <p class="text-gray-400 mb-2" x-show="insufficientTokensInfo">You need <span class="text-white font-semibold" x-text="insufficientTokensInfo?.required"></span> tokens. You have <span class="text-yellow-400 font-semibold" x-text="insufficientTokensInfo?.balance"></span>.</p>
+            <p class="text-gray-400 mb-6">Tokens never expire. First purchase removes ads.</p>
+            <div class="grid grid-cols-2 gap-3 mb-6">
+                <button @click="buyPack('starter')" class="text-left bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl p-4 transition">
+                    <div class="text-sm font-semibold text-white">Starter</div>
+                    <div class="text-yellow-400 text-lg font-bold">50 🪙</div>
+                    <div class="text-gray-400 text-xs">$5 · $0.10/token</div>
+                </button>
+                <button @click="buyPack('builder')" class="text-left bg-gray-800 hover:bg-gray-700 border border-purple-700 rounded-xl p-4 transition">
+                    <div class="text-sm font-semibold text-white">Builder <span class="text-[10px] text-purple-400">Popular</span></div>
+                    <div class="text-yellow-400 text-lg font-bold">150 🪙</div>
+                    <div class="text-gray-400 text-xs">$12 · $0.08/token</div>
+                </button>
+                <button @click="buyPack('pro')" class="text-left bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl p-4 transition">
+                    <div class="text-sm font-semibold text-white">Pro</div>
+                    <div class="text-yellow-400 text-lg font-bold">500 🪙</div>
+                    <div class="text-gray-400 text-xs">$29 · $0.058/token</div>
+                </button>
+                <button @click="buyPack('team')" class="text-left bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl p-4 transition">
+                    <div class="text-sm font-semibold text-white">Team</div>
+                    <div class="text-yellow-400 text-lg font-bold">2000 🪙</div>
+                    <div class="text-gray-400 text-xs">$79 · $0.04/token</div>
+                </button>
             </div>
-            <button @click="showUpgradeModal=false; startCheckout()" class="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-semibold py-3 rounded-xl transition mb-3">
-                Subscribe — $9/mo
-            </button>
-            <button @click="showUpgradeModal=false" class="text-sm text-gray-500 hover:text-gray-300">Maybe later</button>
+            <button @click="showTokenShop=false" class="text-sm text-gray-500 hover:text-gray-300">Maybe later</button>
         </div>
+    </div>
+</div>
+
+<!-- Insufficient tokens modal -->
+<div x-show="showInsufficientModal" x-transition class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" @click.self="showInsufficientModal=false">
+    <div class="bg-gray-900 border border-gray-700 rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl text-center">
+        <div class="text-4xl mb-4">🪙</div>
+        <h3 class="text-xl font-bold text-white mb-2">Not Enough Tokens</h3>
+        <p class="text-gray-400 mb-4">You need <span class="text-white font-semibold" x-text="insufficientTokensInfo?.required"></span> tokens but only have <span class="text-yellow-400 font-semibold" x-text="insufficientTokensInfo?.balance"></span>.</p>
+        <button @click="showInsufficientModal=false; showTokenShop=true" class="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-semibold py-3 rounded-xl transition mb-3">Buy Tokens</button>
+        <button @click="showInsufficientModal=false" class="text-sm text-gray-500 hover:text-gray-300">Cancel</button>
     </div>
 </div>
 
@@ -885,16 +952,18 @@ APP_PAGE = r"""<!DOCTYPE html>
         <template x-if="savedDbId">
             <span class="text-xs text-green-400">✓ Saved</span>
         </template>
-        <!-- Upgrade button for free users -->
-        <template x-if="user && !isPro">
-            <button @click="startCheckout()" class="text-xs bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white px-3 py-1.5 rounded-lg flex items-center gap-1">⭐ Upgrade</button>
+        <!-- Token balance & buy tokens -->
+        <template x-if="user">
+            <div class="flex items-center gap-2">
+                <span class="text-xs bg-gray-800 text-yellow-400 px-2 py-1 rounded-lg">🪙 <span x-text="userTokens"></span> tokens</span>
+                <button @click="showTokenShop=true" class="text-xs bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white px-3 py-1.5 rounded-lg flex items-center gap-1">🪙 Buy Tokens</button>
+            </div>
         </template>
         <!-- Auth -->
         <template x-if="user">
             <div class="flex items-center gap-2 text-xs">
                 <img :src="user.avatar_url" class="w-6 h-6 rounded-full">
                 <span class="text-gray-300" x-text="user.username"></span>
-                <template x-if="isPro"><span class="bg-purple-600 text-white text-[10px] px-1.5 py-0.5 rounded font-bold">PRO</span></template>
                 <a href="/auth/logout" class="text-gray-500 hover:text-gray-300">Logout</a>
             </div>
         </template>
@@ -903,6 +972,19 @@ APP_PAGE = r"""<!DOCTYPE html>
                 <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
                 Sign in
             </a>
+        </template>
+    </div>
+</div>
+
+<!-- Ad banner (free users only) -->
+<div x-show="showAds" class="px-4 py-1 shrink-0">
+    <div class="ad-slot ad-banner flex items-center justify-center">
+        <span class="ad-label">Ad</span>
+        <template x-if="adsenseConfigured">
+            <ins class="adsbygoogle" style="display:inline-block;width:728px;height:90px" data-ad-client="ca-pub-XXXX" data-ad-slot="BANNER_SLOT_ID"></ins>
+        </template>
+        <template x-if="!adsenseConfigured">
+            <span class="text-gray-600 text-xs">Ad</span>
         </template>
     </div>
 </div>
@@ -1019,12 +1101,20 @@ APP_PAGE = r"""<!DOCTYPE html>
                         </div>
                     </template>
                     <template x-for="(msg, i) in messages" :key="i">
-                        <div :class="msg.role==='user' ? 'flex justify-end' : ''" class="msg-enter">
-                            <div :class="msg.role==='user' ? 'bg-purple-900/40 border-purple-800' : 'bg-gray-900 border-gray-800'" class="border rounded-xl px-4 py-3 max-w-[85%]">
-                                <div x-show="msg.role==='user'" class="text-sm text-white" x-text="msg.text"></div>
-                                <div x-show="msg.role==='assistant'" class="prose prose-invert prose-sm max-w-none" x-html="renderMd(msg.text)"></div>
-                                <div x-show="msg.role==='loading'" class="flex items-center gap-2 text-gray-400 text-sm">
-                                    <span class="spinner"></span> Thinking...
+                        <div>
+                            <!-- Inline ad every 5 messages -->
+                            <div x-show="showAds && i > 0 && i % 5 === 0" class="ad-slot ad-inline flex items-center justify-center my-2">
+                                <span class="ad-label">Ad</span>
+                                <template x-if="adsenseConfigured"><ins class="adsbygoogle" style="display:inline-block;width:100%;height:60px" data-ad-client="ca-pub-XXXX" data-ad-slot="INLINE_SLOT_ID"></ins></template>
+                                <template x-if="!adsenseConfigured"><span class="text-gray-600 text-xs">Ad</span></template>
+                            </div>
+                            <div :class="msg.role==='user' ? 'flex justify-end' : ''" class="msg-enter">
+                                <div :class="msg.role==='user' ? 'bg-purple-900/40 border-purple-800' : 'bg-gray-900 border-gray-800'" class="border rounded-xl px-4 py-3 max-w-[85%]">
+                                    <div x-show="msg.role==='user'" class="text-sm text-white" x-text="msg.text"></div>
+                                    <div x-show="msg.role==='assistant'" class="prose prose-invert prose-sm max-w-none" x-html="renderMd(msg.text)"></div>
+                                    <div x-show="msg.role==='loading'" class="flex items-center gap-2 text-gray-400 text-sm">
+                                        <span class="spinner"></span> Thinking...
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1036,7 +1126,7 @@ APP_PAGE = r"""<!DOCTYPE html>
                             @keydown.enter="sendChat()"
                             :disabled="chatLoading || exampleLoaded"
                             class="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 disabled:opacity-50">
-                        <button @click="sendChat()" :disabled="chatLoading || exampleLoaded" class="bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 px-4 py-2.5 rounded-lg text-sm">Send</button>
+                        <button @click="sendChat()" :disabled="chatLoading || exampleLoaded" class="bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 px-4 py-2.5 rounded-lg text-sm">Send (2 🪙)</button>
                     </div>
                     <p x-show="exampleLoaded" class="text-xs text-gray-500 mt-2">Chat disabled in example mode. <a href="/app" class="text-purple-400 hover:underline">Load your own repo</a> to chat.</p>
                 </div>
@@ -1061,7 +1151,7 @@ APP_PAGE = r"""<!DOCTYPE html>
                                     @click="generateAudio()"
                                     :disabled="audioGenerating"
                                     class="text-xs text-gray-500 hover:text-purple-400 bg-gray-900 border border-gray-800 px-3 py-1.5 rounded-lg transition flex items-center gap-1 disabled:opacity-50">
-                                    <span x-show="!audioGenerating">🎧 Listen</span>
+                                    <span x-show="!audioGenerating">🎧 Listen (30 🪙)</span>
                                     <span x-show="audioGenerating" class="flex items-center gap-1"><span class="spinner" style="width:12px;height:12px;border-width:1.5px"></span> Generating audio...</span>
                                 </button>
                             </div>
@@ -1131,20 +1221,18 @@ APP_PAGE = r"""<!DOCTYPE html>
             <div class="p-3 space-y-2">
                 <button @click="doGenerate('overview')" :disabled="generating || exampleLoaded"
                     class="w-full text-left bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg p-3 transition disabled:opacity-50">
-                    <div class="flex items-center gap-2 text-sm font-medium">📖 Overview</div>
+                    <div class="flex items-center gap-2 text-sm font-medium">📖 Overview <span class="text-yellow-400 text-xs">(10 🪙)</span></div>
                     <p class="text-xs text-gray-500 mt-1">Architecture, concepts, how it works</p>
                 </button>
                 <button @click="doGenerate('podcast')" :disabled="generating || exampleLoaded"
                     class="w-full text-left bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg p-3 transition disabled:opacity-50">
-                    <div class="flex items-center gap-2 text-sm font-medium">🎙️ Podcast Script <span x-show="!isPro" class="text-yellow-500 text-xs">🔒</span></div>
+                    <div class="flex items-center gap-2 text-sm font-medium">🎙️ Podcast Script <span class="text-yellow-400 text-xs">(20 🪙)</span></div>
                     <p class="text-xs text-gray-500 mt-1">Two-host conversation about the codebase</p>
-                    <p x-show="!isPro" class="text-[10px] text-purple-400 mt-1">Pro feature</p>
                 </button>
                 <button @click="doGenerate('slides')" :disabled="generating || exampleLoaded"
                     class="w-full text-left bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg p-3 transition disabled:opacity-50">
-                    <div class="flex items-center gap-2 text-sm font-medium">📊 Slide Deck <span x-show="!isPro" class="text-yellow-500 text-xs">🔒</span></div>
+                    <div class="flex items-center gap-2 text-sm font-medium">📊 Slide Deck <span class="text-yellow-400 text-xs">(15 🪙)</span></div>
                     <p class="text-xs text-gray-500 mt-1">Presentation-ready breakdown</p>
-                    <p x-show="!isPro" class="text-[10px] text-purple-400 mt-1">Pro feature</p>
                 </button>
             </div>
             
@@ -1159,6 +1247,18 @@ APP_PAGE = r"""<!DOCTYPE html>
                         <div class="text-[10px] text-gray-500 mt-0.5" x-text="item.depth + ' · ' + item.expertise"></div>
                     </button>
                 </template>
+            </div>
+            <!-- Sidebar ad (free users) -->
+            <div x-show="showAds" class="px-3 py-2 shrink-0">
+                <div class="ad-slot ad-sidebar flex items-center justify-center">
+                    <span class="ad-label">Ad</span>
+                    <template x-if="adsenseConfigured">
+                        <ins class="adsbygoogle" style="display:block;width:100%;min-height:250px" data-ad-client="ca-pub-XXXX" data-ad-slot="SIDEBAR_SLOT_ID" data-ad-format="auto"></ins>
+                    </template>
+                    <template x-if="!adsenseConfigured">
+                        <span class="text-gray-600 text-xs">Ad</span>
+                    </template>
+                </div>
             </div>
         </div>
 
@@ -1203,12 +1303,16 @@ function repolm() {
         authChecked: false,
         savedRepos: [],
         savedDbId: null,
-        subscription: {plan:'free', subscription_status:'none', repos_this_month:0},
-        showUpgradeModal: false,
-        upgradeFeature: '',
+        showTokenShop: false,
+        showInsufficientModal: false,
+        insufficientTokensInfo: null,
         checkoutSuccess: false,
+        userTokens: 0,
+        userHasPurchased: false,
 
-        get isPro() { return this.subscription.plan === 'pro' && this.subscription.subscription_status === 'active'; },
+        get showAds() { return !this.user || !this.userHasPurchased; },
+        get adsenseConfigured() { return window.ADSENSE_CLIENT_ID && window.ADSENSE_CLIENT_ID !== '' && !window.ADSENSE_CLIENT_ID.includes('__'); },
+        get isPro() { return false; },
 
         init() {
             this.checkAuth();
@@ -1218,7 +1322,7 @@ function repolm() {
             if (params.get('checkout') === 'success') {
                 this.checkoutSuccess = true;
                 window.history.replaceState({}, '', '/app');
-                setTimeout(() => this.checkoutSuccess = false, 5000);
+                setTimeout(() => { this.checkoutSuccess = false; this.refreshTokens(); }, 2000);
             }
         },
 
@@ -1228,32 +1332,37 @@ function repolm() {
                 const data = await res.json();
                 this.user = data.user;
                 if (this.user) {
+                    this.userTokens = data.user.tokens || 0;
+                    this.userHasPurchased = data.user.has_purchased || false;
                     this.loadSavedRepos();
-                    this.loadSubscription();
                 }
             } catch(e) {}
             this.authChecked = true;
         },
 
-        async loadSubscription() {
+        async refreshTokens() {
             try {
-                const res = await fetch('/api/my/subscription');
-                if (res.ok) this.subscription = await res.json();
+                const res = await fetch('/auth/me');
+                const data = await res.json();
+                if (data.user) {
+                    this.userTokens = data.user.tokens || 0;
+                    this.userHasPurchased = data.user.has_purchased || false;
+                }
             } catch(e) {}
         },
 
-        async startCheckout() {
+        async buyPack(pack) {
             try {
-                const res = await fetch('/api/checkout', {method:'POST'});
+                const res = await fetch('/api/checkout', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({pack})});
                 const data = await res.json();
                 if (data.url) window.location.href = data.url;
                 else if (data.error) alert(data.error);
             } catch(e) { alert('Failed to start checkout'); }
         },
 
-        handleUpgradeRequired(feature) {
-            this.upgradeFeature = feature;
-            this.showUpgradeModal = true;
+        handleInsufficientTokens(required, balance) {
+            this.insufficientTokensInfo = {required, balance};
+            this.showInsufficientModal = true;
         },
 
         async loadSavedRepos() {
@@ -1375,7 +1484,7 @@ function repolm() {
                     body: JSON.stringify({url})
                 });
                 const data = await res.json();
-                if (res.status === 402) { this.handleUpgradeRequired(data.feature); this.loadingRepo = false; return; }
+                if (res.status === 402) { this.handleInsufficientTokens(data.required, data.balance); this.loadingRepo = false; return; }
                 if (data.error) { this.repoError = data.error; this.loadingRepo = false; return; }
                 this.repoId = data.repo_id;
                 this.pollRepo();
@@ -1447,7 +1556,9 @@ function repolm() {
                     body: JSON.stringify({message:text, depth:this.depth, expertise:this.expertise})
                 });
                 const data = await res.json();
+                if (res.status === 402) { this.messages.pop(); this.handleInsufficientTokens(data.required, data.balance); this.chatLoading = false; return; }
                 this.messages.pop();
+                if (data.balance !== undefined && data.balance !== null) this.userTokens = data.balance;
                 const reply = data.response || data.error || 'Something went wrong';
                 this.messages.push({role:'assistant', text: reply});
                 // Auto-save chat if logged in
@@ -1481,7 +1592,8 @@ function repolm() {
                     body: JSON.stringify({message:text, depth:this.depth, expertise:this.expertise, selection:this.selectedText, file_path:this.currentFile})
                 });
                 const data = await res.json();
-                if (res.status === 402) { this.immersiveMessages.pop(); this.handleUpgradeRequired(data.feature); return; }
+                if (res.status === 402) { this.immersiveMessages.pop(); this.handleInsufficientTokens(data.required, data.balance); return; }
+                if (data.balance !== undefined && data.balance !== null) this.userTokens = data.balance;
                 this.immersiveMessages.pop();
                 this.immersiveMessages.push({role:'assistant', text: data.response || data.error});
             } catch(e) {
@@ -1501,7 +1613,7 @@ function repolm() {
                     body: JSON.stringify({kind, depth:this.depth, expertise:this.expertise})
                 });
                 const data = await res.json();
-                if (res.status === 402) { this.generating = false; this.handleUpgradeRequired(data.feature); return; }
+                if (res.status === 402) { this.generating = false; this.handleInsufficientTokens(data.required, data.balance); return; }
                 const job_id = data.job_id;
                 const iv = setInterval(async () => {
                     try {
