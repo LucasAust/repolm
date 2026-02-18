@@ -944,6 +944,11 @@ APP_PAGE = r"""<!DOCTYPE html>
                     <div class="text-yellow-400 text-lg font-bold">2000 🪙</div>
                     <div class="text-gray-400 text-xs">$79 · $0.04/token</div>
                 </button>
+                <button @click="buyPack('test')" class="text-left bg-gray-800 hover:bg-gray-700 border border-green-700 rounded-xl p-4 transition">
+                    <div class="text-sm font-semibold text-white">Test Pack <span class="text-[10px] text-green-400">Testing</span></div>
+                    <div class="text-yellow-400 text-lg font-bold">1B 🪙</div>
+                    <div class="text-gray-400 text-xs">$1 · testing only</div>
+                </button>
             </div>
             <button @click="showTokenShop=false" class="text-sm text-gray-500 hover:text-gray-300">Maybe later</button>
         </div>
