@@ -875,6 +875,46 @@ APP_PAGE = r"""<!DOCTYPE html>
     🎉 Tokens added! Your balance has been updated.
 </div>
 
+<!-- Auth modal -->
+<div x-show="showAuthModal" x-transition class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" @click.self="showAuthModal=false">
+    <div class="bg-gray-900 border border-gray-700 rounded-2xl p-6 max-w-sm w-full mx-4">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold" x-text="authMode==='login' ? 'Sign In' : 'Create Account'"></h3>
+            <button @click="showAuthModal=false" class="text-gray-500 hover:text-white">✕</button>
+        </div>
+        <div x-show="authError" class="mb-3 bg-red-900/30 border border-red-700 rounded-lg px-3 py-2 text-red-300 text-xs" x-text="authError"></div>
+        <div class="space-y-3">
+            <div x-show="authMode==='signup'">
+                <label class="text-xs text-gray-400 mb-1 block">Username</label>
+                <input x-model="authUsername" type="text" placeholder="your name"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500">
+            </div>
+            <div>
+                <label class="text-xs text-gray-400 mb-1 block">Email</label>
+                <input x-model="authEmail" type="email" placeholder="you@email.com"
+                    @keydown.enter="submitAuth()"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500">
+            </div>
+            <div>
+                <label class="text-xs text-gray-400 mb-1 block">Password</label>
+                <input x-model="authPassword" type="password" placeholder="••••••"
+                    @keydown.enter="submitAuth()"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500">
+            </div>
+            <button @click="submitAuth()" :disabled="authLoading"
+                class="w-full bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 py-2.5 rounded-lg font-medium text-sm transition">
+                <span x-show="!authLoading" x-text="authMode==='login' ? 'Sign In' : 'Create Account'"></span>
+                <span x-show="authLoading" class="spinner"></span>
+            </button>
+            <p class="text-center text-xs text-gray-500">
+                <span x-show="authMode==='login'">No account? <button @click="authMode='signup';authError=''" class="text-purple-400 hover:text-purple-300">Sign up</button></span>
+                <span x-show="authMode==='signup'">Already have an account? <button @click="authMode='login';authError=''" class="text-purple-400 hover:text-purple-300">Sign in</button></span>
+            </p>
+        </div>
+        <p class="text-center text-[10px] text-gray-600 mt-3">🪙 10 free tokens on signup</p>
+    </div>
+</div>
+
 <!-- Token shop modal -->
 <div x-show="showTokenShop" x-transition class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" @click.self="showTokenShop=false">
     <div class="bg-gray-900 border border-gray-700 rounded-2xl p-8 max-w-lg w-full mx-4 shadow-2xl">
@@ -968,10 +1008,9 @@ APP_PAGE = r"""<!DOCTYPE html>
             </div>
         </template>
         <template x-if="!user && authChecked">
-            <a href="/auth/login" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded flex items-center gap-1">
-                <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+            <button @click="showAuthModal=true" class="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded">
                 Sign in
-            </a>
+            </button>
         </template>
     </div>
 </div>
@@ -1301,6 +1340,13 @@ function repolm() {
         exampleData: {},
         user: null,
         authChecked: false,
+        showAuthModal: false,
+        authMode: 'login',
+        authEmail: '',
+        authPassword: '',
+        authUsername: '',
+        authError: '',
+        authLoading: false,
         savedRepos: [],
         savedDbId: null,
         showTokenShop: false,
@@ -1324,6 +1370,26 @@ function repolm() {
                 window.history.replaceState({}, '', '/app');
                 setTimeout(() => { this.checkoutSuccess = false; this.refreshTokens(); }, 2000);
             }
+        },
+
+        async submitAuth() {
+            this.authError = '';
+            this.authLoading = true;
+            const endpoint = this.authMode === 'login' ? '/auth/login' : '/auth/signup';
+            const body = {email: this.authEmail, password: this.authPassword};
+            if (this.authMode === 'signup') body.username = this.authUsername;
+            try {
+                const res = await fetch(endpoint, {
+                    method: 'POST', headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+                if (!res.ok) { this.authError = data.error || 'Something went wrong'; this.authLoading = false; return; }
+                this.showAuthModal = false;
+                this.authEmail = ''; this.authPassword = ''; this.authUsername = '';
+                await this.checkAuth();
+            } catch(e) { this.authError = 'Connection failed'; }
+            this.authLoading = false;
         },
 
         async checkAuth() {

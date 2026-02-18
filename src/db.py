@@ -139,6 +139,8 @@ def init_db():
             "month_reset": "ALTER TABLE users ADD COLUMN month_reset TEXT",
             "tokens": "ALTER TABLE users ADD COLUMN tokens INTEGER DEFAULT 0",
             "has_purchased": "ALTER TABLE users ADD COLUMN has_purchased INTEGER DEFAULT 0",
+            "password_hash": "ALTER TABLE users ADD COLUMN password_hash TEXT",
+            "password_salt": "ALTER TABLE users ADD COLUMN password_salt TEXT",
         }
         for col, sql in migrations.items():
             if col not in cols:

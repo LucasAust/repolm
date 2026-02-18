@@ -1,27 +1,33 @@
 """
-RepoLM — GitHub OAuth
-Minimal: redirect to GitHub → callback → session cookie.
-Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET env vars.
+RepoLM — Email/Password Auth
+Simple signup + login with bcrypt password hashing.
 """
 
 import os
+import hashlib
+import hmac
+import secrets
 from typing import Optional
-import httpx
-from fastapi import APIRouter, Request, Response
-from fastapi.responses import RedirectResponse
-from db import create_or_update_user, create_session, get_user_by_session, delete_session, get_subscription, get_token_balance, has_ever_purchased
+
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse, RedirectResponse
+from db import (create_session, get_user_by_session, delete_session,
+                get_subscription, get_token_balance, has_ever_purchased)
+import db as database
 
 router = APIRouter()
-
-GH_CLIENT_ID = os.environ.get("GITHUB_CLIENT_ID", "")
-GH_CLIENT_SECRET = os.environ.get("GITHUB_CLIENT_SECRET", "")
-GH_REDIRECT_URI = os.environ.get("REPOLM_URL", "http://127.0.0.1:8000") + "/auth/callback"
-
 SESSION_COOKIE = "repolm_session"
 
 
+def _hash_password(password: str, salt: str = None) -> tuple:
+    """Hash password with PBKDF2. Returns (hash, salt)."""
+    if salt is None:
+        salt = secrets.token_hex(16)
+    pw_hash = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 100000).hex()
+    return pw_hash, salt
+
+
 def get_current_user(request: Request) -> Optional[dict]:
-    # Check Bearer token first, then cookie
     auth_header = request.headers.get("authorization", "")
     if auth_header.startswith("Bearer "):
         token = auth_header[7:]
@@ -33,7 +39,6 @@ def get_current_user(request: Request) -> Optional[dict]:
 
 
 def get_user_plan(request: Request) -> str:
-    """Returns 'pro' or 'free'. Works for anonymous users too."""
     user = get_current_user(request)
     if not user:
         return "free"
@@ -43,53 +48,70 @@ def get_user_plan(request: Request) -> str:
     return "free"
 
 
-@router.get("/auth/login")
-async def login():
-    if not GH_CLIENT_ID:
-        return RedirectResponse("/app?auth=demo")
-    return RedirectResponse(
-        f"https://github.com/login/oauth/authorize?client_id={GH_CLIENT_ID}&redirect_uri={GH_REDIRECT_URI}&scope=read:user,user:email"
-    )
+@router.post("/auth/signup")
+async def signup(request: Request):
+    body = await request.json()
+    email = body.get("email", "").strip().lower()
+    password = body.get("password", "")
+    username = body.get("username", "").strip()
 
+    if not email or not password:
+        return JSONResponse({"error": "Email and password required"}, 400)
+    if len(password) < 6:
+        return JSONResponse({"error": "Password must be at least 6 characters"}, 400)
+    if not username:
+        username = email.split("@")[0]
 
-@router.get("/auth/callback")
-async def callback(code: str, request: Request):
-    # Exchange code for token
-    async with httpx.AsyncClient() as client:
-        resp = await client.post("https://github.com/login/oauth/access_token", json={
-            "client_id": GH_CLIENT_ID,
-            "client_secret": GH_CLIENT_SECRET,
-            "code": code,
-        }, headers={"Accept": "application/json"})
-        data = resp.json()
-        access_token = data.get("access_token")
-        if not access_token:
-            return RedirectResponse("/?error=auth_failed")
+    # Check if email exists
+    with database.db() as conn:
+        existing = conn.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone()
+        if existing:
+            return JSONResponse({"error": "Account already exists. Try logging in."}, 409)
 
-        # Get user info
-        user_resp = await client.get("https://api.github.com/user",
-                                     headers={"Authorization": f"Bearer {access_token}"})
-        user_data = user_resp.json()
+    pw_hash, salt = _hash_password(password)
 
-        # Get email
-        email = user_data.get("email")
-        if not email:
-            email_resp = await client.get("https://api.github.com/user/emails",
-                                          headers={"Authorization": f"Bearer {access_token}"})
-            emails = email_resp.json()
-            if emails and isinstance(emails, list):
-                primary = next((e for e in emails if e.get("primary")), emails[0])
-                email = primary.get("email")
+    with database.db() as conn:
+        cur = conn.execute(
+            "INSERT INTO users (username, email, password_hash, password_salt) VALUES (?,?,?,?)",
+            (username, email, pw_hash, salt)
+        )
+        user_id = cur.lastrowid
+        # Give 10 free tokens
+        conn.execute("UPDATE users SET tokens = 10 WHERE id=?", (user_id,))
+        conn.execute(
+            "INSERT INTO token_transactions (user_id, amount, action, description) VALUES (?,?,?,?)",
+            (user_id, 10, "bonus", "Welcome bonus")
+        )
 
-    user_id = create_or_update_user(
-        github_id=user_data["id"],
-        username=user_data["login"],
-        email=email,
-        avatar_url=user_data.get("avatar_url"),
-    )
     session_token = create_session(user_id)
+    response = JSONResponse({"ok": True, "username": username})
+    response.set_cookie(SESSION_COOKIE, session_token, max_age=30*86400, httponly=True, samesite="lax")
+    return response
 
-    response = RedirectResponse("/app")
+
+@router.post("/auth/login")
+async def login(request: Request):
+    body = await request.json()
+    email = body.get("email", "").strip().lower()
+    password = body.get("password", "")
+
+    if not email or not password:
+        return JSONResponse({"error": "Email and password required"}, 400)
+
+    with database.db() as conn:
+        row = conn.execute(
+            "SELECT id, username, password_hash, password_salt FROM users WHERE email=?", (email,)
+        ).fetchone()
+
+    if not row:
+        return JSONResponse({"error": "Invalid email or password"}, 401)
+
+    pw_hash, _ = _hash_password(password, row["password_salt"])
+    if not hmac.compare_digest(pw_hash, row["password_hash"]):
+        return JSONResponse({"error": "Invalid email or password"}, 401)
+
+    session_token = create_session(row["id"])
+    response = JSONResponse({"ok": True, "username": row["username"]})
     response.set_cookie(SESSION_COOKIE, session_token, max_age=30*86400, httponly=True, samesite="lax")
     return response
 
@@ -116,13 +138,12 @@ async def me(request: Request):
     tokens = get_token_balance(user["id"])
     purchased = has_ever_purchased(user["id"])
     return {"user": {"id": user["id"], "username": user["username"],
-                     "avatar_url": user["avatar_url"], "plan": plan,
+                     "email": user.get("email", ""), "plan": plan,
                      "tokens": tokens, "has_purchased": purchased}}
 
 
 @router.get("/auth/token")
 async def get_token(request: Request):
-    """Get API token for Bearer auth."""
     token = request.cookies.get(SESSION_COOKIE)
     user = get_current_user(request)
     if not user or not token:
