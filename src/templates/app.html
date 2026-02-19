@@ -536,19 +536,6 @@
                                     class="text-xs text-gray-500 hover:text-purple-400 bg-gray-900 border border-gray-800 px-3 py-1.5 rounded-lg transition flex items-center gap-1">
                                     🔗 Share
                                 </button>
-                                <button x-show="viewingGenerated" @click="shareTwitter()"
-                                    class="text-xs text-gray-500 hover:text-blue-400 bg-gray-900 border border-gray-800 px-3 py-1.5 rounded-lg transition flex items-center gap-1">
-                                    🐦 Tweet
-                                </button>
-                                <button x-show="viewingGenerated" @click="shareLinkedIn()"
-                                    class="text-xs text-gray-500 hover:text-blue-400 bg-gray-900 border border-gray-800 px-3 py-1.5 rounded-lg transition flex items-center gap-1">
-                                    💼 LinkedIn
-                                </button>
-                                <!-- Export All -->
-                                <button x-show="generated.length > 1" @click="exportAll()"
-                                    class="text-xs text-gray-500 hover:text-purple-400 bg-gray-900 border border-gray-800 px-3 py-1.5 rounded-lg transition flex items-center gap-1">
-                                    📦 Export All
-                                </button>
                                 <!-- Copy transcript for podcast -->
                                 <button x-show="viewingGenerated && viewingGenerated.kind==='podcast'" @click="copyTranscript()"
                                     class="text-xs text-gray-500 hover:text-purple-400 bg-gray-900 border border-gray-800 px-3 py-1.5 rounded-lg transition flex items-center gap-1">
