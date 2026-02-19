@@ -1,7 +1,5 @@
 # RepoLM Launch Content
 
-Replace `repolm.com` with your actual domain once set up.
-
 ---
 
 ## 🐦 Twitter/X Launch Thread
@@ -139,7 +137,7 @@ Been building this for a few weeks. The idea: make any codebase learnable in min
 - 10 curated learning paths with real repos
 
 **Revenue model:**
-- Free tier with ads (Carbon Ads)
+- Free tier with ads
 - Token packs ($5-$79)
 - Pro subscription ($19/mo) and Team ($49/mo)
 - Public API for developers
@@ -158,8 +156,6 @@ https://repolm.com
 **Title:** RepoLM: AI-powered tool that generates architecture overviews, podcasts, and slide decks from GitHub repos
 
 **Body:**
-[Keep it short for r/programming — they don't like self-promotion walls]
-
 Built a tool that analyzes GitHub repos and generates structured learning content — overviews, podcast scripts with audio, slide decks with PPTX export, and interactive chat.
 
 You pick your expertise level and it adapts: beginners get analogies, experts get code-heavy analysis with tradeoff discussions.
@@ -245,3 +241,255 @@ Would love your feedback on what to build next.
 - On Reddit, don't be defensive about criticism — thank people and note the feedback
 - Retweet/quote tweet anyone who shares it
 - Post a follow-up tweet with early stats: "24 hours: X repos analyzed, Y signups"
+
+---
+
+## 🎬 Video Scripts
+
+### Script 1: Quick Demo (60 seconds — Twitter/TikTok/Shorts)
+
+**[Screen: repolm.com landing page]**
+
+"What if you could understand any GitHub repo in under a minute?"
+
+**[Type "expressjs/express" into the URL bar, hit Go]**
+
+"Paste any GitHub URL..."
+
+**[Show the repo loading, files appearing in sidebar]**
+
+"RepoLM clones it, analyzes every file..."
+
+**[Click Generate → Overview. Show content streaming in]**
+
+"...and gives you a full architecture breakdown. TL;DR at the top, collapsible sections, actual code references."
+
+**[Switch to the expertise toggle, click Beginner → Expert]**
+
+"Set your level. Beginner gets analogies. Expert gets raw code."
+
+**[Click Generate → Podcast. Show the chat bubble UI]**
+
+"Or generate a podcast — two hosts discuss the codebase like they're on a show."
+
+**[Click the Listen button, show audio playing briefly]**
+
+"With actual audio you can listen to."
+
+**[Click Generate → Slides. Show the slide viewer, click through 2-3 slides]**
+
+"Need a presentation? Download it as a PowerPoint."
+
+**[Click PPTX download button]**
+
+**[Switch to Chat tab, type "How does the middleware pipeline work?"]**
+
+"Or just ask questions. It knows the entire codebase."
+
+**[Show response streaming in]**
+
+**[Cut to landing page]**
+
+"repolm.com — first repo is free."
+
+---
+
+### Script 2: Full Walkthrough (3-5 minutes — YouTube/Twitter long-form)
+
+**[Screen: repolm.com]**
+
+"I built something I wish existed when I was learning to code. Let me show you."
+
+**[Click into the app]**
+
+"This is RepoLM. You give it any GitHub repo, and it turns it into actual learning content."
+
+**SECTION 1: Ingestion**
+
+**[Paste https://github.com/pallets/flask, hit Go]**
+
+"Let's try Flask — the Python web framework. I paste the URL, and it clones the repo, analyzes the file structure, builds an import graph to figure out which files matter most..."
+
+**[Show files loading in sidebar]**
+
+"Now I've got the full codebase. I can browse any file right here."
+
+**[Click on a file, show code viewer]**
+
+"But reading files isn't the point. Watch this."
+
+**SECTION 2: Overview**
+
+**[Click Generate → Overview]**
+
+"I'll generate an overview. You can see it streaming in real-time — this isn't a canned response, it's analyzing Flask's actual source code right now."
+
+**[Show content appearing, pause to read the TL;DR]**
+
+"It starts with a TL;DR, then breaks down architecture, key concepts, how the request lifecycle works... and every section is collapsible so you can focus on what matters to you."
+
+**[Click open/closed a few sections]**
+
+"Notice it's referencing real files — app.py, ctx.py, the Blueprint class. This isn't generic."
+
+**SECTION 3: Levels**
+
+**[Switch to Beginner mode in the top bar]**
+
+"Here's the magic. I switch to Beginner mode..."
+
+**[Generate overview again]**
+
+"Same repo, completely different explanation. Now it's using analogies — 'think of Flask like a restaurant where routes are the menu items...' No jargon, no assumptions."
+
+**[Switch to Expert]**
+
+"Expert mode? Code-heavy. It shows you the WSGI internals, discusses the tradeoffs of the application factory pattern, references specific decorators."
+
+**SECTION 4: Podcast**
+
+**[Click Generate → Podcast]**
+
+"Now this is my favorite feature. It generates a podcast script — two hosts, Alex and Sam, discussing the codebase."
+
+**[Show the chat bubble UI with the conversation]**
+
+"Alex asks the questions you'd ask. Sam explains with analogies. They reference actual function names from Flask's source."
+
+**[Scroll to show stage directions like [LAUGHS] and code references]**
+
+"And you can generate actual audio..."
+
+**[Click Listen, let it play for 5-10 seconds]**
+
+"...and listen to it while you commute or work out."
+
+**SECTION 5: Slides**
+
+**[Click Generate → Slides]**
+
+"If you need a presentation — maybe for a study group or a tech talk — it builds a slide deck."
+
+**[Show the slide viewer, click through a few slides]**
+
+"Visual viewer, keyboard navigation... and you can download it as an actual PowerPoint file."
+
+**[Click PPTX download]**
+
+**SECTION 6: Chat**
+
+**[Switch to Chat tab]**
+
+"And then there's chat. This is where it gets really useful."
+
+**[Type: "How does Flask handle request context?"]**
+
+"I can ask anything. It knows every file in the repo."
+
+**[Show response streaming]**
+
+"It references specific files, shows code snippets... and it remembers the conversation."
+
+**[Type a follow-up: "How is that different from the application context?"]**
+
+"Follow-ups work naturally. No re-explaining needed."
+
+**SECTION 7: Immersive Mode**
+
+**[Open a file in the viewer, highlight a block of code]**
+
+"One more thing — Immersive mode. I highlight any code and ask about it."
+
+**[Type "Why is it done this way?" in the immersive sidebar]**
+
+**[Show the contextual response]**
+
+"It explains that specific code in context of the entire codebase."
+
+**SECTION 8: Closing**
+
+**[Go back to landing page]**
+
+"repolm.com. First repo is free, no signup needed. If you learn by reading code, this will save you hours."
+
+**[Show the Learning Paths page briefly]**
+
+"There's also curated learning paths — repos organized by concept. Event-driven architecture, REST APIs, state machines, testing..."
+
+**[Back to landing]**
+
+"Link in the description. Let me know what you think."
+
+---
+
+### Script 3: Problem-Hook Short (30 seconds — Reels/TikTok/Shorts)
+
+**[Face camera or text overlay on screen]**
+
+"You ever open a GitHub repo with 200 files and think... where do I even start?"
+
+**[Cut to repolm.com, paste a repo URL]**
+
+"Paste it here."
+
+**[Show overview streaming in]**
+
+"Full architecture breakdown in 30 seconds."
+
+**[Show podcast bubbles]**
+
+"Or listen to two people explain it like a podcast."
+
+**[Show slide viewer]**
+
+"Or get a slide deck you can download."
+
+**[Show chat]**
+
+"Or just ask it questions."
+
+"repolm.com. Free."
+
+---
+
+### Script 4: "I Learned React in 10 Minutes" (2 min — YouTube/Twitter)
+
+**[Screen: repolm.com]**
+
+"I'm going to learn how React works in 10 minutes using AI. Let's see if this actually works."
+
+**[Paste facebook/react, hit Go]**
+
+"Loading the actual React source code... 1,800 files. Good luck reading that manually."
+
+**[Generate overview at Beginner level]**
+
+"Beginner overview... okay, TL;DR: React is a library for building UIs using a virtual DOM. Cool."
+
+**[Scroll through architecture section]**
+
+"There's the reconciler, the fiber architecture, the scheduler... it's breaking down each piece with analogies."
+
+**[Generate podcast]**
+
+"Let's hear the podcast version."
+
+**[Play audio for 15 seconds — listen to hosts discussing React]**
+
+"Okay that's actually fun to listen to."
+
+**[Switch to Expert mode, generate overview]**
+
+"Now let me switch to Expert..."
+
+**[Show the code-heavy output]**
+
+"Completely different. Now it's showing me the fiber node structure, the work loop, how concurrent mode works under the hood."
+
+**[Chat: "How does React's diffing algorithm work?"]**
+
+**[Show response]**
+
+"Ten minutes, and I genuinely understand React better than after reading the docs for an hour."
+
+"repolm.com. First repo free."
