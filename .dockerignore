@@ -12,7 +12,11 @@ dist
 build
 .idea
 .vscode
-src/output
+src/output/*.txt
+src/output/*.md
+src/output/*.mp3
+src/output/audio_*
+!src/output/examples/
 src/repolm.db
 src/repolm.db-wal
 src/repolm.db-shm
