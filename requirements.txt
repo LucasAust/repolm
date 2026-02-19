@@ -5,3 +5,5 @@ uvicorn>=0.24.0
 httpx>=0.25.0
 python-multipart>=0.0.6
 stripe>=7.0.0
+python-pptx>=0.6.21
+gunicorn>=21.2.0

@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pricing — RepoLM</title>
+<meta name="theme-color" content="#09090b">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="apple-touch-icon" href="/static/favicon.svg">
+<meta name="description" content="RepoLM pricing plans. Free tier, Pro, and Team. Learn any codebase with AI-powered overviews, podcasts, and slides.">
+<meta property="og:title" content="Pricing — RepoLM">
+<meta property="og:description" content="Choose the right plan for learning codebases with AI.">
+<script src="https://cdn.tailwindcss.com"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<style>
+body{background:#09090b;color:#e5e7eb;font-family:system-ui,-apple-system,sans-serif}
+.glow{box-shadow:0 0 60px rgba(139,92,246,0.15)}
+.card-hover{transition:all 0.2s}.card-hover:hover{transform:translateY(-2px)}
+</style>
+</head>
+<body>
+<div x-data="{annual: false}" class="min-h-screen">
+
+<!-- Nav -->
+<nav class="max-w-6xl mx-auto px-6 py-5 flex items-center justify-between">
+    <a href="/" class="text-xl font-bold"><span class="text-purple-400">Repo</span>LM</a>
+    <div class="flex items-center gap-4">
+        <a href="/learn" class="text-sm text-gray-400 hover:text-purple-300">📚 Learn</a>
+        <a href="/app" class="text-sm text-purple-400 hover:text-purple-300">Open App →</a>
+    </div>
+</nav>
+
+<!-- Header -->
+<section class="max-w-4xl mx-auto px-6 pt-16 pb-8 text-center">
+    <h1 class="text-4xl md:text-5xl font-bold mb-4">Simple, transparent pricing</h1>
+    <p class="text-xl text-gray-400 mb-8">Start free. Upgrade when you need more.</p>
+
+    <!-- Annual toggle -->
+    <div class="flex items-center justify-center gap-3 mb-12">
+        <span :class="!annual ? 'text-white' : 'text-gray-500'" class="text-sm font-medium">Monthly</span>
+        <button @click="annual = !annual" class="relative w-12 h-6 rounded-full transition" :class="annual ? 'bg-purple-600' : 'bg-gray-700'">
+            <div class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform" :class="annual ? 'translate-x-6' : ''"></div>
+        </button>
+        <span :class="annual ? 'text-white' : 'text-gray-500'" class="text-sm font-medium">Annual</span>
+        <span x-show="annual" class="text-xs bg-green-900/50 text-green-400 px-2 py-0.5 rounded-full">Save 20%</span>
+    </div>
+</section>
+
+<!-- Plans -->
+<section class="max-w-5xl mx-auto px-6 pb-16">
+    <div class="grid md:grid-cols-3 gap-6">
+
+        <!-- Free -->
+        <div class="bg-gray-900/50 border border-gray-800 rounded-2xl p-8 card-hover">
+            <h3 class="text-lg font-semibold mb-1">Free</h3>
+            <p class="text-gray-500 text-sm mb-6">Try it out</p>
+            <div class="mb-6">
+                <span class="text-4xl font-bold">$0</span>
+                <span class="text-gray-500">/forever</span>
+            </div>
+            <a href="/app" class="block w-full text-center bg-gray-800 hover:bg-gray-700 text-white font-medium py-3 rounded-xl transition mb-6">Get Started</a>
+            <ul class="space-y-3 text-sm text-gray-400">
+                <li class="flex items-start gap-2"><span class="text-green-400">✓</span> 1 free overview (no signup)</li>
+                <li class="flex items-start gap-2"><span class="text-green-400">✓</span> 10 tokens on signup</li>
+                <li class="flex items-start gap-2"><span class="text-green-400">✓</span> Overview generation</li>
+                <li class="flex items-start gap-2"><span class="text-green-400">✓</span> Chat with code</li>
+                <li class="flex items-start gap-2"><span class="text-green-400">✓</span> Immersive mode</li>
+                <li class="flex items-start gap-2"><span class="text-gray-600">✗</span> <span class="text-gray-600">Ads shown</span></li>
+                <li class="flex items-start gap-2"><span class="text-gray-600">✗</span> <span class="text-gray-600">No API access</span></li>
+            </ul>
+        </div>
+
+        <!-- Pro (Most Popular) -->
+        <div class="bg-gray-900/50 border-2 border-purple-600 rounded-2xl p-8 card-hover relative glow">
+            <div class="absolute -top-3 left-1/2 -translate-x-1/2 bg-purple-600 text-white text-xs font-bold px-4 py-1 rounded-full">Most Popular</div>
+            <h3 class="text-lg font-semibold mb-1">Pro</h3>
+            <p class="text-gray-500 text-sm mb-6">For serious learners</p>
+            <div class="mb-6">
+                <span class="text-4xl font-bold" x-text="annual ? '$15' : '$19'"></span>
+                <span class="text-gray-500" x-text="annual ? '/mo (billed yearly)' : '/month'"></span>
+            </div>
+            <button onclick="window.location.href='/app?subscribe=pro'" class="block w-full text-center bg-purple-600 hover:bg-purple-500 text-white font-medium py-3 rounded-xl transition mb-6">Subscribe to Pro</button>
+            <ul class="space-y-3 text-sm text-gray-400">
+                <li class="flex items-start gap-2"><span class="text-green-400">✓</span> <strong class="text-white">200 tokens/month</strong></li>
+                <li class="flex items-start gap-2"><span class="text-green-400">✓</span> All generation types</li>
+                <li class="flex items-start gap-2"><span class="text-green-400">✓</span> Podcast audio generation</li>
+                <li class="flex items-start gap-2"><span class="text-green-400">✓</span> Concept Lab</li>
+                <li class="flex items-start gap-2"><span class="text-green-400">✓</span> <strong class="text-white">No ads</strong></li>
+                <li class="flex items-start gap-2"><span class="text-green-400">✓</span> Priority queue</li>
+                <li class="flex items-start gap-2"><span class="text-green-400">✓</span> Unlimited saved repos</li>
+            </ul>
+        </div>
+
+        <!-- Team -->
+        <div class="bg-gray-900/50 border border-gray-800 rounded-2xl p-8 card-hover">
+            <h3 class="text-lg font-semibold mb-1">Team</h3>
+            <p class="text-gray-500 text-sm mb-6">For teams & power users</p>
+            <div class="mb-6">
+                <span class="text-4xl font-bold" x-text="annual ? '$39' : '$49'"></span>
+                <span class="text-gray-500" x-text="annual ? '/mo (billed yearly)' : '/month'"></span>
+            </div>
+            <button onclick="window.location.href='/app?subscribe=team'" class="block w-full text-center bg-gray-800 hover:bg-gray-700 text-white font-medium py-3 rounded-xl transition mb-6">Subscribe to Team</button>
+            <ul class="space-y-3 text-sm text-gray-400">
+                <li class="flex items-start gap-2"><span class="text-green-400">✓</span> <strong class="text-white">500 tokens/month</strong></li>
+                <li class="flex items-start gap-2"><span class="text-green-400">✓</span> Everything in Pro</li>
+                <li class="flex items-start gap-2"><span class="text-green-400">✓</span> <strong class="text-white">API access</strong></li>
+                <li class="flex items-start gap-2"><span class="text-green-400">✓</span> 1000 API calls/day</li>
+                <li class="flex items-start gap-2"><span class="text-green-400">✓</span> Priority support</li>
+                <li class="flex items-start gap-2"><span class="text-green-400">✓</span> Webhooks</li>
+                <li class="flex items-start gap-2"><span class="text-green-400">✓</span> Export & integrations</li>
+            </ul>
+        </div>
+    </div>
+</section>
+
+<!-- Token packs -->
+<section class="max-w-4xl mx-auto px-6 py-12">
+    <div class="text-center mb-8">
+        <h2 class="text-2xl font-bold mb-2">Or buy tokens à la carte</h2>
+        <p class="text-gray-400">No subscription needed. Tokens never expire.</p>
+    </div>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-gray-900/50 border border-gray-800 rounded-xl p-4 text-center">
+            <div class="text-yellow-400 text-xl font-bold">50 🪙</div>
+            <div class="text-white font-semibold mt-1">$5</div>
+            <div class="text-xs text-gray-500">$0.10/token</div>
+        </div>
+        <div class="bg-gray-900/50 border border-purple-700 rounded-xl p-4 text-center">
+            <div class="text-yellow-400 text-xl font-bold">150 🪙</div>
+            <div class="text-white font-semibold mt-1">$12</div>
+            <div class="text-xs text-gray-500">$0.08/token</div>
+        </div>
+        <div class="bg-gray-900/50 border border-gray-800 rounded-xl p-4 text-center">
+            <div class="text-yellow-400 text-xl font-bold">500 🪙</div>
+            <div class="text-white font-semibold mt-1">$29</div>
+            <div class="text-xs text-gray-500">$0.058/token</div>
+        </div>
+        <div class="bg-gray-900/50 border border-gray-800 rounded-xl p-4 text-center">
+            <div class="text-yellow-400 text-xl font-bold">2000 🪙</div>
+            <div class="text-white font-semibold mt-1">$79</div>
+            <div class="text-xs text-gray-500">$0.04/token</div>
+        </div>
+    </div>
+</section>
+
+<!-- Token costs reference -->
+<section class="max-w-4xl mx-auto px-6 py-12">
+    <div class="bg-gray-900/30 border border-gray-800 rounded-2xl p-8">
+        <h3 class="text-lg font-bold mb-4 text-center">What costs what?</h3>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center text-sm">
+            <div><div class="text-2xl mb-1">📖</div><div class="text-white font-medium">Overview</div><div class="text-yellow-400">10 🪙</div></div>
+            <div><div class="text-2xl mb-1">🎙️</div><div class="text-white font-medium">Podcast Script</div><div class="text-yellow-400">20 🪙</div></div>
+            <div><div class="text-2xl mb-1">📊</div><div class="text-white font-medium">Slides</div><div class="text-yellow-400">15 🪙</div></div>
+            <div><div class="text-2xl mb-1">💬</div><div class="text-white font-medium">Chat Message</div><div class="text-yellow-400">2 🪙</div></div>
+            <div><div class="text-2xl mb-1">🎧</div><div class="text-white font-medium">Audio</div><div class="text-yellow-400">30 🪙</div></div>
+            <div><div class="text-2xl mb-1">🔍</div><div class="text-white font-medium">Immersive Q</div><div class="text-yellow-400">3 🪙</div></div>
+            <div><div class="text-2xl mb-1">🧪</div><div class="text-white font-medium">Concept Lab</div><div class="text-yellow-400">50 🪙</div></div>
+            <div><div class="text-2xl mb-1">🔗</div><div class="text-white font-medium">Ingest Repo</div><div class="text-yellow-400">5 🪙</div></div>
+        </div>
+    </div>
+</section>
+
+<!-- FAQ -->
+<section class="max-w-3xl mx-auto px-6 py-16">
+    <h2 class="text-2xl font-bold mb-8 text-center">Frequently Asked Questions</h2>
+    <div class="space-y-4" x-data="{open: null}">
+        <div class="bg-gray-900/50 border border-gray-800 rounded-xl overflow-hidden">
+            <button @click="open = open === 1 ? null : 1" class="w-full text-left px-6 py-4 flex items-center justify-between">
+                <span class="font-medium">Can I cancel anytime?</span>
+                <span x-text="open === 1 ? '−' : '+'" class="text-gray-500"></span>
+            </button>
+            <div x-show="open === 1" x-transition class="px-6 pb-4 text-gray-400 text-sm">
+                Yes! Cancel anytime from your account settings. Your subscription stays active until the end of the billing period. No questions asked.
+            </div>
+        </div>
+        <div class="bg-gray-900/50 border border-gray-800 rounded-xl overflow-hidden">
+            <button @click="open = open === 2 ? null : 2" class="w-full text-left px-6 py-4 flex items-center justify-between">
+                <span class="font-medium">Do tokens roll over?</span>
+                <span x-text="open === 2 ? '−' : '+'" class="text-gray-500"></span>
+            </button>
+            <div x-show="open === 2" x-transition class="px-6 pb-4 text-gray-400 text-sm">
+                <strong>Token packs:</strong> Never expire. Use them whenever.<br>
+                <strong>Subscription tokens:</strong> Refresh monthly. Unused tokens from the previous month don't roll over, but you keep any purchased token packs.
+            </div>
+        </div>
+        <div class="bg-gray-900/50 border border-gray-800 rounded-xl overflow-hidden">
+            <button @click="open = open === 3 ? null : 3" class="w-full text-left px-6 py-4 flex items-center justify-between">
+                <span class="font-medium">What counts as a token?</span>
+                <span x-text="open === 3 ? '−' : '+'" class="text-gray-500"></span>
+            </button>
+            <div x-show="open === 3" x-transition class="px-6 pb-4 text-gray-400 text-sm">
+                Each action costs a fixed number of tokens. An overview costs 10, a chat message costs 2, podcast audio costs 30. See the table above for the full breakdown. There are no hidden costs.
+            </div>
+        </div>
+        <div class="bg-gray-900/50 border border-gray-800 rounded-xl overflow-hidden">
+            <button @click="open = open === 4 ? null : 4" class="w-full text-left px-6 py-4 flex items-center justify-between">
+                <span class="font-medium">Is there a free trial?</span>
+                <span x-text="open === 4 ? '−' : '+'" class="text-gray-500"></span>
+            </button>
+            <div x-show="open === 4" x-transition class="px-6 pb-4 text-gray-400 text-sm">
+                Better — your first repo overview is completely free, no signup required. After that, signing up gives you 10 free tokens. You can explore before committing to anything.
+            </div>
+        </div>
+        <div class="bg-gray-900/50 border border-gray-800 rounded-xl overflow-hidden">
+            <button @click="open = open === 5 ? null : 5" class="w-full text-left px-6 py-4 flex items-center justify-between">
+                <span class="font-medium">What payment methods do you accept?</span>
+                <span x-text="open === 5 ? '−' : '+'" class="text-gray-500"></span>
+            </button>
+            <div x-show="open === 5" x-transition class="px-6 pb-4 text-gray-400 text-sm">
+                We use Stripe for payments. You can pay with any major credit/debit card, Apple Pay, Google Pay, and other methods supported by Stripe in your region.
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- CTA -->
+<section class="max-w-4xl mx-auto px-6 py-16 text-center">
+    <h2 class="text-3xl font-bold mb-4">Ready to learn faster?</h2>
+    <p class="text-gray-400 mb-8">Join thousands of developers who use RepoLM to understand codebases in minutes.</p>
+    <a href="/app" class="inline-block bg-purple-600 hover:bg-purple-500 text-white font-semibold px-8 py-4 rounded-xl text-lg transition glow">Try RepoLM Free →</a>
+</section>
+
+<footer class="max-w-6xl mx-auto px-6 py-10 border-t border-gray-800 text-center text-gray-600 text-sm">
+    <span class="text-purple-400 font-semibold">Repo</span>LM — Powered by Gemini
+</footer>
+</div>
+</body>
+</html>

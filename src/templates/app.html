@@ -1,0 +1,1909 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RepoLM</title>
+<meta name="theme-color" content="#09090b">
+<meta name="description" content="AI-powered code education. Paste a GitHub repo, get overviews, podcasts, slides, and interactive learning.">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="apple-touch-icon" href="/static/favicon.svg">
+<script src="https://cdn.tailwindcss.com"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<style>
+[x-cloak]{display:none!important}
+*{scrollbar-width:thin;scrollbar-color:#374151 transparent}
+.file-tree::-webkit-scrollbar,.chat-area::-webkit-scrollbar,.viewer::-webkit-scrollbar{width:6px}
+.file-tree::-webkit-scrollbar-thumb,.chat-area::-webkit-scrollbar-thumb,.viewer::-webkit-scrollbar-thumb{background:#374151;border-radius:3px}
+.prose pre{background:#0d1117;border-radius:8px;padding:12px;overflow-x:auto;font-size:13px}
+.prose code{font-size:13px}
+.prose h1,.prose h2,.prose h3{color:#e5e7eb}
+.prose p,.prose li{color:#d1d5db}
+.code-viewer .line:hover{background:rgba(139,92,246,0.08)}
+::selection{background:rgba(139,92,246,0.4)}
+@keyframes fade-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.msg-enter{animation:fade-in 0.2s ease-out}
+.spinner{border:2px solid #374151;border-top:2px solid #8b5cf6;border-radius:50%;width:18px;height:18px;animation:spin 0.8s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+.skeleton{background:linear-gradient(90deg,#1f2937 25%,#374151 50%,#1f2937 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:4px}
+.ad-slot{background:#111827;border:1px solid #1f2937;border-radius:8px;text-align:center;overflow:hidden;position:relative}
+.ad-slot .ad-label{position:absolute;top:2px;right:6px;font-size:9px;color:#4b5563;z-index:1}
+.ad-banner{height:90px;width:100%}
+.ad-sidebar{min-height:250px;width:100%}
+.ad-inline{height:60px;width:100%;margin:8px 0}
+/* Podcast chat bubbles */
+.podcast-bubble{max-width:80%;padding:12px 16px;border-radius:16px;margin-bottom:8px;line-height:1.5;font-size:14px}
+.podcast-alex{background:rgba(20,184,166,0.15);border:1px solid rgba(20,184,166,0.3);border-bottom-left-radius:4px;margin-right:auto}
+.podcast-sam{background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);border-bottom-right-radius:4px;margin-left:auto}
+.podcast-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0}
+/* Fullscreen slides */
+.slide-fullscreen{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,0.95);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px}
+.slide-fullscreen .slide-content{max-width:1200px;width:100%;aspect-ratio:16/9;display:flex;flex-direction:column;justify-content:center;padding:60px;background:#111827;border:1px solid #374151;border-radius:16px}
+/* Viewer fade transition */
+.viewer-fade{transition:opacity 0.2s ease-in-out}
+.viewer-fade-enter{opacity:0}
+/* Slide transitions */
+.slide-container{position:relative;overflow:hidden}
+.slide-animate{transition:transform 0.3s ease,opacity 0.3s ease}
+.slide-enter-left{transform:translateX(-30px);opacity:0}
+.slide-enter-right{transform:translateX(30px);opacity:0}
+/* Code skeleton */
+.code-skeleton .skel-line{height:14px;margin-bottom:6px;border-radius:3px}
+/* Stage direction styling for podcast */
+.stage-direction{font-style:italic;color:#6b7280;font-size:12px}
+/* Mobile responsive */
+@media(max-width:767px){
+  .desktop-only{display:none!important}
+  .mobile-sidebar{position:fixed;top:0;left:0;bottom:0;width:280px;z-index:60;background:#09090b;border-right:1px solid #1f2937;transform:translateX(-100%);transition:transform 0.3s ease}
+  .mobile-sidebar.open{transform:translateX(0)}
+  .mobile-generate{position:fixed;top:0;right:0;bottom:0;width:300px;z-index:60;background:#09090b;border-left:1px solid #1f2937;transform:translateX(100%);transition:transform 0.3s ease}
+  .mobile-generate.open{transform:translateX(0)}
+  .mobile-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:55;display:none}
+  .mobile-overlay.open{display:block}
+  .mobile-tab-bar{position:fixed;bottom:0;left:0;right:0;z-index:50;background:#0a0a0c;border-top:1px solid #1f2937;display:flex;height:56px}
+  .mobile-tab-bar button{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:10px;color:#6b7280;transition:color 0.2s}
+  .mobile-tab-bar button.active{color:#a78bfa}
+  .mobile-tab-bar .tab-icon{font-size:20px}
+  .main-layout{padding-bottom:56px}
+}
+@media(min-width:768px){
+  .mobile-tab-bar{display:none!important}
+  .mobile-overlay{display:none!important}
+}
+/* Touch swipe for slides */
+.touch-swipe{touch-action:pan-y}
+</style>
+<!-- Carbon Ads — replace CARBON_SERVE and CARBON_PLACEMENT with your IDs after approval -->
+<script>window.CARBON_SERVE = '__CARBON_SERVE__'; window.CARBON_PLACEMENT = '__CARBON_PLACEMENT__';</script>
+<style>
+#carbonads{font-family:system-ui,-apple-system,sans-serif;max-width:330px;border-radius:8px;overflow:hidden;background:#111827;border:1px solid #1f2937}
+#carbonads a{color:#e5e7eb;text-decoration:none}
+#carbonads a:hover{color:#a78bfa}
+#carbonads span{display:block;overflow:hidden}
+.carbon-wrap{display:flex;align-items:center;padding:12px}
+.carbon-img{margin-right:12px;line-height:1;flex-shrink:0}
+.carbon-img img{display:block;width:130px;height:100px;border-radius:6px}
+.carbon-text{font-size:13px;line-height:1.4;color:#d1d5db}
+.carbon-poweredby{display:block;padding:6px 12px;text-align:center;font-size:9px;color:#4b5563;letter-spacing:0.5px;text-transform:uppercase;border-top:1px solid #1f2937}
+</style>
+</head>
+<body class="bg-gray-950 text-gray-100 h-screen overflow-hidden">
+
+<div x-data="repolm()" x-init="init()" x-cloak class="h-screen flex flex-col">
+
+<!-- Checkout success banner -->
+<div x-show="checkoutSuccess" x-transition class="fixed top-0 left-0 right-0 z-50 bg-green-600 text-white text-center py-3 text-sm font-medium">
+    🎉 Tokens added! Your balance has been updated.
+</div>
+
+<!-- Server busy retry banner -->
+<div x-show="busyRetrying" x-transition class="fixed top-0 left-0 right-0 z-50 bg-yellow-600 text-white text-center py-3 text-sm font-medium">
+    ⏳ High demand — retrying... (attempt <span x-text="busyRetryCount"></span>/3)
+</div>
+
+<!-- Server status indicator -->
+<div class="fixed top-2 right-2 z-40 flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] bg-gray-900/80 border border-gray-700"
+     x-show="serverStatus !== 'green'" x-transition>
+    <div class="w-2 h-2 rounded-full" :class="{'bg-yellow-400': serverStatus==='yellow', 'bg-red-500': serverStatus==='red', 'bg-green-400': serverStatus==='green'}"></div>
+    <span x-text="serverStatusText" class="text-gray-300"></span>
+</div>
+
+<!-- Queue position indicator -->
+<div x-show="queuePosition" x-transition class="fixed top-12 right-2 z-40 px-3 py-1.5 rounded-lg text-xs bg-purple-900/80 border border-purple-700 text-purple-200">
+    ⏳ You're #<span x-text="queuePosition"></span> in queue
+</div>
+
+<!-- Auth modal -->
+<div x-show="showAuthModal" x-transition class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" @click.self="showAuthModal=false">
+    <div class="bg-gray-900 border border-gray-700 rounded-2xl p-6 max-w-sm w-full mx-4">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold" x-text="authMode==='login' ? 'Sign In' : 'Create Account'"></h3>
+            <button @click="showAuthModal=false" class="text-gray-500 hover:text-white">✕</button>
+        </div>
+        <div x-show="authError" class="mb-3 bg-red-900/30 border border-red-700 rounded-lg px-3 py-2 text-red-300 text-xs" x-text="authError"></div>
+        <div class="space-y-3">
+            <div x-show="authMode==='signup'">
+                <label class="text-xs text-gray-400 mb-1 block">Username</label>
+                <input x-model="authUsername" type="text" placeholder="your name"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500">
+            </div>
+            <div>
+                <label class="text-xs text-gray-400 mb-1 block">Email</label>
+                <input x-model="authEmail" type="email" placeholder="you@email.com"
+                    @keydown.enter="submitAuth()"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500">
+            </div>
+            <div>
+                <label class="text-xs text-gray-400 mb-1 block">Password</label>
+                <input x-model="authPassword" type="password" placeholder="••••••"
+                    @keydown.enter="submitAuth()"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500">
+            </div>
+            <button @click="submitAuth()" :disabled="authLoading"
+                class="w-full bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 py-2.5 rounded-lg font-medium text-sm transition">
+                <span x-show="!authLoading" x-text="authMode==='login' ? 'Sign In' : 'Create Account'"></span>
+                <span x-show="authLoading" class="spinner"></span>
+            </button>
+            <p class="text-center text-xs text-gray-500">
+                <span x-show="authMode==='login'">No account? <button @click="authMode='signup';authError=''" class="text-purple-400 hover:text-purple-300">Sign up</button></span>
+                <span x-show="authMode==='signup'">Already have an account? <button @click="authMode='login';authError=''" class="text-purple-400 hover:text-purple-300">Sign in</button></span>
+            </p>
+        </div>
+        <p class="text-center text-[10px] text-gray-600 mt-3">🪙 10 free tokens on signup</p>
+    </div>
+</div>
+
+<!-- Token shop modal -->
+<div x-show="showTokenShop" x-transition class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" @click.self="showTokenShop=false">
+    <div class="bg-gray-900 border border-gray-700 rounded-2xl p-8 max-w-lg w-full mx-4 shadow-2xl">
+        <div class="text-center">
+            <div class="text-4xl mb-4">🪙</div>
+            <h3 class="text-2xl font-bold text-white mb-2">Buy Tokens</h3>
+            <p class="text-gray-400 mb-2" x-show="insufficientTokensInfo">You need <span class="text-white font-semibold" x-text="insufficientTokensInfo?.required"></span> tokens. You have <span class="text-yellow-400 font-semibold" x-text="insufficientTokensInfo?.balance"></span>.</p>
+            <p class="text-gray-400 mb-6">Tokens never expire. First purchase removes ads.</p>
+            <div class="grid grid-cols-2 gap-3 mb-6">
+                <button @click="buyPack('starter')" class="text-left bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl p-4 transition">
+                    <div class="text-sm font-semibold text-white">Starter</div>
+                    <div class="text-yellow-400 text-lg font-bold">50 🪙</div>
+                    <div class="text-gray-400 text-xs">$5 · $0.10/token</div>
+                </button>
+                <button @click="buyPack('builder')" class="text-left bg-gray-800 hover:bg-gray-700 border border-purple-700 rounded-xl p-4 transition">
+                    <div class="text-sm font-semibold text-white">Builder <span class="text-[10px] text-purple-400">Popular</span></div>
+                    <div class="text-yellow-400 text-lg font-bold">150 🪙</div>
+                    <div class="text-gray-400 text-xs">$12 · $0.08/token</div>
+                </button>
+                <button @click="buyPack('pro')" class="text-left bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl p-4 transition">
+                    <div class="text-sm font-semibold text-white">Pro</div>
+                    <div class="text-yellow-400 text-lg font-bold">500 🪙</div>
+                    <div class="text-gray-400 text-xs">$29 · $0.058/token</div>
+                </button>
+                <button @click="buyPack('team')" class="text-left bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl p-4 transition">
+                    <div class="text-sm font-semibold text-white">Team</div>
+                    <div class="text-yellow-400 text-lg font-bold">2000 🪙</div>
+                    <div class="text-gray-400 text-xs">$79 · $0.04/token</div>
+                </button>
+                <button @click="buyPack('test')" class="text-left bg-gray-800 hover:bg-gray-700 border border-green-700 rounded-xl p-4 transition">
+                    <div class="text-sm font-semibold text-white">Test Pack <span class="text-[10px] text-green-400">Testing</span></div>
+                    <div class="text-yellow-400 text-lg font-bold">1B 🪙</div>
+                    <div class="text-gray-400 text-xs">$1 · testing only</div>
+                </button>
+            </div>
+            <div class="flex items-center justify-center gap-4">
+                <a href="/pricing" class="text-sm text-purple-400 hover:text-purple-300">View subscription plans →</a>
+                <button @click="showTokenShop=false" class="text-sm text-gray-500 hover:text-gray-300">Maybe later</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Insufficient tokens modal -->
+<div x-show="showInsufficientModal" x-transition class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" @click.self="showInsufficientModal=false">
+    <div class="bg-gray-900 border border-gray-700 rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl text-center">
+        <div class="text-4xl mb-4">🪙</div>
+        <h3 class="text-xl font-bold text-white mb-2">Not Enough Tokens</h3>
+        <p class="text-gray-400 mb-4">You need <span class="text-white font-semibold" x-text="insufficientTokensInfo?.required"></span> tokens but only have <span class="text-yellow-400 font-semibold" x-text="insufficientTokensInfo?.balance"></span>.</p>
+        <button @click="showInsufficientModal=false; showTokenShop=true" class="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-semibold py-3 rounded-xl transition mb-3">Buy Tokens</button>
+        <button @click="showInsufficientModal=false" class="text-sm text-gray-500 hover:text-gray-300">Cancel</button>
+    </div>
+</div>
+
+<!-- Onboarding Tour Overlay -->
+<template x-if="showTour">
+    <div class="fixed inset-0 z-[60]">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="closeTour()"></div>
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-gray-900 border border-gray-700 rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl z-10">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-2">
+                    <span class="text-purple-400 text-lg">👋</span>
+                    <span class="text-xs text-gray-500" x-text="(tourStep+1) + ' / ' + tourSteps.length"></span>
+                </div>
+                <button @click="closeTour()" class="text-gray-500 hover:text-white text-sm">Skip tour</button>
+            </div>
+            <h3 class="text-lg font-bold text-white mb-2" x-text="tourSteps[tourStep]?.title"></h3>
+            <p class="text-sm text-gray-400 mb-6" x-text="tourSteps[tourStep]?.desc"></p>
+            <div class="flex items-center gap-2">
+                <div class="flex gap-1 flex-1">
+                    <template x-for="(_, i) in tourSteps" :key="i">
+                        <div class="h-1 flex-1 rounded-full" :class="i <= tourStep ? 'bg-purple-500' : 'bg-gray-700'"></div>
+                    </template>
+                </div>
+                <button x-show="tourStep > 0" @click="prevTourStep()" class="text-xs text-gray-400 hover:text-white px-3 py-1.5 rounded-lg">Back</button>
+                <button @click="nextTourStep()" class="text-xs bg-purple-600 hover:bg-purple-500 text-white px-4 py-1.5 rounded-lg" x-text="tourStep < tourSteps.length - 1 ? 'Next' : 'Get Started!'"></button>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Achievement notification -->
+<div x-show="achievementPopup" x-transition class="fixed top-16 right-4 z-50 bg-gray-900 border border-purple-600 rounded-xl p-4 shadow-2xl max-w-xs" @click="achievementPopup=null">
+    <div class="flex items-center gap-3">
+        <span class="text-3xl" x-text="achievementPopup?.emoji"></span>
+        <div>
+            <div class="text-sm font-bold text-purple-300">🏆 Achievement Unlocked!</div>
+            <div class="text-white font-medium" x-text="achievementPopup?.name"></div>
+        </div>
+    </div>
+</div>
+
+<!-- First free banner for anonymous users -->
+<div x-show="showFirstFreeBanner" x-transition class="fixed bottom-16 left-1/2 -translate-x-1/2 z-40 bg-gradient-to-r from-purple-900/90 to-pink-900/90 border border-purple-600 rounded-xl px-6 py-3 shadow-2xl backdrop-blur max-w-md text-center">
+    <p class="text-sm text-white font-medium mb-2">🎉 Your free overview is ready!</p>
+    <p class="text-xs text-gray-300 mb-3">Sign up to get 10 more tokens and unlock chat, podcasts, and slides.</p>
+    <button @click="showAuthModal=true;authMode='signup';showFirstFreeBanner=false" class="bg-white text-purple-900 font-semibold text-sm px-4 py-2 rounded-lg hover:bg-gray-100 transition">Create Free Account</button>
+    <button @click="showFirstFreeBanner=false" class="text-xs text-gray-400 ml-3">Maybe later</button>
+</div>
+
+<!-- Concept Lab Modal -->
+<div x-show="showConceptLab" x-transition class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" @click.self="showConceptLab=false">
+    <div class="bg-gray-900 border border-gray-700 rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-bold">🧪 Concept Lab</h3>
+            <button @click="showConceptLab=false" class="text-gray-500 hover:text-white">✕</button>
+        </div>
+        <p class="text-sm text-gray-400 mb-4">Describe a concept and we'll generate a teaching repo for you.</p>
+        <div class="space-y-3">
+            <div>
+                <label class="text-xs text-gray-400 mb-1 block">What do you want to learn?</label>
+                <textarea x-model="conceptInput" rows="3" placeholder="e.g. Observer pattern in Python, How dependency injection works..."
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 resize-none"></textarea>
+            </div>
+            <div class="flex gap-3">
+                <div class="flex-1">
+                    <label class="text-xs text-gray-400 mb-1 block">Language</label>
+                    <select x-model="conceptLanguage" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500">
+                        <option>Python</option><option>JavaScript</option><option>TypeScript</option><option>Go</option><option>Rust</option><option>Java</option><option>Ruby</option>
+                    </select>
+                </div>
+                <div class="flex-1">
+                    <label class="text-xs text-gray-400 mb-1 block">Difficulty</label>
+                    <select x-model="conceptDifficulty" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500">
+                        <option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option>
+                    </select>
+                </div>
+            </div>
+            <div x-show="conceptStatus" class="text-xs text-purple-400 flex items-center gap-2">
+                <span x-show="conceptGenerating" class="spinner"></span>
+                <span x-text="conceptStatus"></span>
+            </div>
+            <button @click="startConceptLab()" :disabled="conceptGenerating || !conceptInput.trim()"
+                class="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 disabled:from-gray-700 disabled:to-gray-700 text-white font-medium py-2.5 rounded-lg transition">
+                <span x-show="!conceptGenerating">Generate Learning Repo (50 🪙)</span>
+                <span x-show="conceptGenerating" class="flex items-center justify-center gap-2"><span class="spinner"></span> Building...</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Top bar -->
+<div class="h-12 border-b border-gray-800 flex items-center px-4 gap-4 shrink-0 bg-gray-950/80 backdrop-blur">
+    <a href="/" class="text-lg font-bold hover:opacity-80"><span class="text-purple-400">Repo</span>LM</a>
+    <a href="/learn" class="text-xs text-gray-400 hover:text-purple-300 transition">📚 Learn</a>
+    <a href="/pricing" class="text-xs text-gray-400 hover:text-purple-300 transition">💎 Pricing</a>
+    <button @click="showConceptLab=true" class="text-xs text-gray-400 hover:text-purple-300 transition">🧪 Lab</button>
+    
+    <template x-if="repoData.name">
+        <div class="flex items-center gap-3 text-sm text-gray-400">
+            <span class="text-white font-medium" x-text="repoData.name"></span>
+            <span x-text="repoData.file_count + ' files'"></span>
+            <span x-text="Object.keys(repoData.languages||{}).slice(0,3).join(', ')"></span>
+        </div>
+    </template>
+
+    <div class="ml-auto flex items-center gap-3">
+        <template x-if="repoReady">
+            <div class="flex items-center gap-2 text-xs">
+                <span class="text-gray-500">Depth:</span>
+                <button @click="depth='high-level'" :class="depth==='high-level'?'bg-purple-600 text-white':'bg-gray-800 text-gray-400'" class="px-2 py-1 rounded">High</button>
+                <button @click="depth='low-level'" :class="depth==='low-level'?'bg-purple-600 text-white':'bg-gray-800 text-gray-400'" class="px-2 py-1 rounded">Low</button>
+                <span class="text-gray-500 ml-2">Level:</span>
+                <button @click="expertise='beginner'" :class="expertise==='beginner'?'bg-purple-600 text-white':'bg-gray-800 text-gray-400'" class="px-2 py-1 rounded">Beginner</button>
+                <button @click="expertise='amateur'" :class="expertise==='amateur'?'bg-purple-600 text-white':'bg-gray-800 text-gray-400'" class="px-2 py-1 rounded">Amateur</button>
+                <button @click="expertise='expert'" :class="expertise==='expert'?'bg-purple-600 text-white':'bg-gray-800 text-gray-400'" class="px-2 py-1 rounded">Expert</button>
+            </div>
+        </template>
+        <!-- Save repo button -->
+        <template x-if="repoReady && user && !savedDbId">
+            <button @click="saveRepo()" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 py-1 rounded">💾 Save</button>
+        </template>
+        <template x-if="savedDbId">
+            <span class="text-xs text-green-400">✓ Saved</span>
+        </template>
+        <!-- Token balance & buy tokens -->
+        <template x-if="user">
+            <div class="flex items-center gap-2">
+                <span x-show="streakCount > 0" class="text-xs bg-orange-900/30 text-orange-400 px-2 py-1 rounded-lg">🔥 <span x-text="streakCount"></span> this week</span>
+                <span class="text-xs bg-gray-800 text-yellow-400 px-2 py-1 rounded-lg">🪙 <span x-text="userTokens"></span> tokens</span>
+                <button @click="showTokenShop=true" class="text-xs bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white px-3 py-1.5 rounded-lg flex items-center gap-1">🪙 Buy Tokens</button>
+            </div>
+        </template>
+        <!-- Auth -->
+        <template x-if="user">
+            <div class="flex items-center gap-2 text-xs">
+                <img :src="user.avatar_url" class="w-6 h-6 rounded-full">
+                <span class="text-gray-300" x-text="user.username"></span>
+                <a href="/auth/logout" class="text-gray-500 hover:text-gray-300">Logout</a>
+            </div>
+        </template>
+        <template x-if="!user && authChecked">
+            <button @click="showAuthModal=true" class="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded">
+                Sign in
+            </button>
+        </template>
+        <button @click="restartTour()" class="text-xs text-gray-500 hover:text-purple-400 w-6 h-6 flex items-center justify-center rounded-full border border-gray-700 hover:border-purple-500 transition" title="Help tour">?</button>
+    </div>
+</div>
+
+<!-- Ad banner (free users only) -->
+<!-- Carbon Ad: Banner -->
+<div x-show="showAds" class="px-4 py-1 shrink-0 flex justify-center" x-init="if(showAds && carbonConfigured) loadCarbonAd($el, 'banner')">
+</div>
+
+<!-- Landing (no repo loaded) -->
+<template x-if="!repoId && !exampleLoaded">
+    <div class="flex-1 flex items-center justify-center">
+        <div class="text-center max-w-lg">
+            <h1 class="text-5xl font-bold mb-3"><span class="text-purple-400">Repo</span>LM</h1>
+            <p class="text-gray-400 mb-8">Paste a GitHub repo or upload a folder. Learn anything.</p>
+            <div class="flex gap-2">
+                <input x-model="urlInput" type="text" placeholder="https://github.com/user/repo"
+                    @keydown.enter="loadRepo()"
+                    class="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500">
+                <button @click="loadRepo()" :disabled="loadingRepo" class="bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 px-6 py-3 rounded-lg font-medium">
+                    <span x-show="!loadingRepo">Go</span>
+                    <span x-show="loadingRepo" class="spinner"></span>
+                </button>
+            </div>
+            <div class="mt-3 flex items-center gap-3">
+                <div class="flex-1 h-px bg-gray-800"></div>
+                <span class="text-xs text-gray-600">or</span>
+                <div class="flex-1 h-px bg-gray-800"></div>
+            </div>
+            <div class="mt-3">
+                <label class="flex items-center justify-center gap-2 bg-gray-900 hover:bg-gray-800 border border-gray-700 border-dashed rounded-lg px-4 py-3 cursor-pointer transition"
+                       @dragover.prevent="$el.classList.add('border-purple-500')"
+                       @dragleave="$el.classList.remove('border-purple-500')"
+                       @drop.prevent="$el.classList.remove('border-purple-500'); handleDrop($event)">
+                    <span class="text-gray-400 text-sm">📁 Upload a folder</span>
+                    <input type="file" webkitdirectory directory multiple class="hidden" @change="handleFolderUpload($event)">
+                </label>
+            </div>
+            <p x-show="repoError" class="mt-3 text-red-400 text-sm" x-text="repoError"></p>
+
+            <!-- Saved repos -->
+            <template x-if="savedRepos.length > 0">
+                <div class="mt-8 text-left">
+                    <p class="text-xs text-gray-500 uppercase tracking-wider mb-3">Your Repos</p>
+                    <div class="space-y-2">
+                        <template x-for="r in savedRepos" :key="r.id">
+                            <button @click="loadSavedRepo(r.id)" class="w-full flex items-center gap-3 bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg px-4 py-3 transition text-left">
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-sm text-white font-medium truncate" x-text="r.name"></p>
+                                    <p class="text-xs text-gray-500" x-text="r.file_count + ' files · ' + Object.keys(r.languages||{}).slice(0,3).join(', ')"></p>
+                                </div>
+                                <button @click.stop="deleteSavedRepo(r.id)" class="text-gray-600 hover:text-red-400 text-xs shrink-0">✕</button>
+                            </button>
+                        </template>
+                    </div>
+                </div>
+            </template>
+
+            <template x-if="savedRepos.length === 0 && user">
+                <div class="mt-8 text-left">
+                    <p class="text-xs text-gray-500 uppercase tracking-wider mb-3">Your Repos</p>
+                    <p class="text-sm text-gray-600 italic">No saved repos yet. Analyze a repo to get started!</p>
+                </div>
+            </template>
+
+            <div class="mt-6 text-sm text-gray-600">
+                <p>Try: expressjs/express · pallets/flask</p>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Loading repo -->
+<template x-if="repoId && !repoReady && !repoError">
+    <div class="flex-1 flex items-center justify-center">
+        <div class="text-center">
+            <div class="spinner mb-4" style="width:32px;height:32px;border-width:3px"></div>
+            <p class="text-white font-medium" x-text="repoMessage"></p>
+        </div>
+    </div>
+</template>
+
+<!-- Main 3-panel layout -->
+<template x-if="repoReady || exampleLoaded">
+    <div class="flex-1 flex overflow-hidden main-layout relative">
+
+        <!-- Mobile overlay -->
+        <div class="mobile-overlay" :class="mobileDrawer ? 'open' : ''" @click="mobileDrawer=null"></div>
+
+        <!-- LEFT: File tree (desktop: static, mobile: drawer) -->
+        <div class="w-64 border-r border-gray-800 flex flex-col shrink-0 bg-gray-950 desktop-only">
+            <div class="px-3 py-2 border-b border-gray-800 text-xs text-gray-500 font-medium uppercase tracking-wider">Files</div>
+            <div class="flex-1 overflow-y-auto file-tree p-2">
+                <!-- Loading skeleton -->
+                <template x-if="loadingFiles">
+                    <div class="space-y-1">
+                        <template x-for="i in 12" :key="i">
+                            <div class="skeleton h-6 w-full" :style="'opacity:'+(1-i*0.06)+';width:'+(60+Math.random()*40)+'%'"></div>
+                        </template>
+                    </div>
+                </template>
+                <template x-for="f in files" :key="f.path">
+                    <button @click="openFile(f.path)"
+                        :class="currentFile===f.path ? 'bg-purple-900/30 text-purple-300' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-900'"
+                        class="w-full text-left text-xs px-2 py-1.5 rounded flex items-center gap-2 transition">
+                        <span :class="f.is_priority ? 'text-yellow-500' : 'text-gray-600'" x-text="f.is_priority ? '★' : '·'"></span>
+                        <span class="truncate" x-text="f.path"></span>
+                        <span class="ml-auto text-gray-600 text-[10px]" x-text="(f.size/1024).toFixed(1)+'k'"></span>
+                    </button>
+                </template>
+            </div>
+        </div>
+
+        <!-- CENTER: Chat or File viewer -->
+        <div class="flex-1 flex flex-col min-w-0">
+            <div class="flex border-b border-gray-800 px-4 shrink-0">
+                <button @click="mode='chat'" :class="mode==='chat'?'border-purple-500 text-purple-400':'border-transparent text-gray-500 hover:text-gray-300'" class="px-4 py-2 text-sm font-medium border-b-2 transition">💬 Chat</button>
+                <button @click="mode='viewer'" :class="mode==='viewer'?'border-purple-500 text-purple-400':'border-transparent text-gray-500 hover:text-gray-300'" class="px-4 py-2 text-sm font-medium border-b-2 transition">📄 Viewer</button>
+                <button @click="mode='immersive'" x-show="currentFile" :class="mode==='immersive'?'border-purple-500 text-purple-400':'border-transparent text-gray-500 hover:text-gray-300'" class="px-4 py-2 text-sm font-medium border-b-2 transition">🔍 Immersive</button>
+            </div>
+
+            <!-- Chat mode -->
+            <div x-show="mode==='chat'" class="flex-1 flex flex-col">
+                <div class="flex-1 overflow-y-auto chat-area p-4 space-y-4" x-ref="chatScroll">
+                    <template x-if="messages.length===0">
+                        <div class="text-center text-gray-500 mt-20">
+                            <p class="text-lg mb-2">Ask anything about <span class="text-white" x-text="repoData.name || exampleData.name"></span></p>
+                            <p class="text-sm">Try: "How does the routing work?" or "Explain the architecture"</p>
+                        </div>
+                    </template>
+                    <template x-for="(msg, i) in messages" :key="i">
+                        <div>
+                            <!-- Inline ad every 5 messages -->
+                            <!-- Carbon only allows one ad per page, so no inline ads -->
+                            <div :class="msg.role==='user' ? 'flex justify-end' : ''" class="msg-enter">
+                                <div :class="msg.role==='user' ? 'bg-purple-900/40 border-purple-800' : 'bg-gray-900 border-gray-800'" class="border rounded-xl px-4 py-3 max-w-[85%]">
+                                    <div x-show="msg.role==='user'" class="text-sm text-white" x-text="msg.text"></div>
+                                    <div x-show="msg.role==='assistant'" class="prose prose-invert prose-sm max-w-none" x-html="renderMd(msg.text)"></div>
+                                    <div x-show="msg.role==='loading'" class="flex items-center gap-2 text-gray-400 text-sm">
+                                        <span class="spinner"></span> Thinking...
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+                <div class="border-t border-gray-800 p-4">
+                    <div class="flex gap-2">
+                        <input x-model="chatInput" type="text" placeholder="Ask about this codebase..."
+                            @keydown.enter="sendChat()"
+                            :disabled="chatLoading || exampleLoaded"
+                            class="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 disabled:opacity-50">
+                        <button @click="sendChat()" :disabled="chatLoading || exampleLoaded" class="bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 px-4 py-2.5 rounded-lg text-sm">Send (2 🪙)</button>
+                    </div>
+                    <p x-show="exampleLoaded" class="text-xs text-gray-500 mt-2">Chat disabled in example mode. <a href="/app" class="text-purple-400 hover:underline">Load your own repo</a> to chat.</p>
+                </div>
+            </div>
+
+            <!-- Viewer mode -->
+            <div x-show="mode==='viewer'" class="flex-1 overflow-y-auto viewer p-4">
+                <template x-if="!currentFile && !viewingGenerated">
+                    <div class="text-center text-gray-500 mt-20">Select a file from the sidebar or generate content</div>
+                </template>
+                <template x-if="currentFile || viewingGenerated">
+                    <div>
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-sm font-mono text-gray-300" x-text="viewingGenerated ? viewingGenerated.label : currentFile"></h3>
+                            <div class="flex gap-2">
+                                <!-- Copy button -->
+                                <button @click="copyContent()" class="text-xs text-gray-500 hover:text-purple-400 bg-gray-900 border border-gray-800 px-3 py-1.5 rounded-lg transition flex items-center gap-1">
+                                    <span x-text="copyLabel">📋 Copy</span>
+                                </button>
+                                <!-- Download button -->
+                                <button @click="downloadContent()" class="text-xs text-gray-500 hover:text-purple-400 bg-gray-900 border border-gray-800 px-3 py-1.5 rounded-lg transition flex items-center gap-1">
+                                    ⬇️ Download
+                                </button>
+                                <!-- Share button -->
+                                <button x-show="viewingGenerated" @click="shareContent()"
+                                    class="text-xs text-gray-500 hover:text-purple-400 bg-gray-900 border border-gray-800 px-3 py-1.5 rounded-lg transition flex items-center gap-1">
+                                    🔗 Share
+                                </button>
+                                <button x-show="viewingGenerated" @click="shareTwitter()"
+                                    class="text-xs text-gray-500 hover:text-blue-400 bg-gray-900 border border-gray-800 px-3 py-1.5 rounded-lg transition flex items-center gap-1">
+                                    🐦 Tweet
+                                </button>
+                                <button x-show="viewingGenerated" @click="shareLinkedIn()"
+                                    class="text-xs text-gray-500 hover:text-blue-400 bg-gray-900 border border-gray-800 px-3 py-1.5 rounded-lg transition flex items-center gap-1">
+                                    💼 LinkedIn
+                                </button>
+                                <!-- Export All -->
+                                <button x-show="generated.length > 1" @click="exportAll()"
+                                    class="text-xs text-gray-500 hover:text-purple-400 bg-gray-900 border border-gray-800 px-3 py-1.5 rounded-lg transition flex items-center gap-1">
+                                    📦 Export All
+                                </button>
+                                <!-- Copy transcript for podcast -->
+                                <button x-show="viewingGenerated && viewingGenerated.kind==='podcast'" @click="copyTranscript()"
+                                    class="text-xs text-gray-500 hover:text-purple-400 bg-gray-900 border border-gray-800 px-3 py-1.5 rounded-lg transition flex items-center gap-1">
+                                    📝 Transcript
+                                </button>
+                                <!-- Listen button for podcast -->
+                                <button x-show="viewingGenerated && viewingGenerated.kind==='podcast'"
+                                    @click="generateAudio()"
+                                    :disabled="audioGenerating"
+                                    class="text-xs text-gray-500 hover:text-purple-400 bg-gray-900 border border-gray-800 px-3 py-1.5 rounded-lg transition flex items-center gap-1 disabled:opacity-50">
+                                    <span x-show="!audioGenerating">🎧 Listen (30 🪙)</span>
+                                    <span x-show="audioGenerating" class="flex items-center gap-1"><span class="spinner" style="width:12px;height:12px;border-width:1.5px"></span> <span x-text="audioProgressText"></span></span>
+                                </button>
+                            </div>
+                        </div>
+                        <!-- Audio player -->
+                        <div x-show="audioUrl" class="mb-4 bg-gray-900 border border-gray-800 rounded-xl p-3">
+                            <audio :src="audioUrl" controls class="w-full" style="height:40px"></audio>
+                        </div>
+                        <!-- Slide deck viewer -->
+                        <template x-if="viewingGenerated && viewingGenerated.kind==='slides' && parsedSlides.length > 0">
+                            <div @keydown.window="handleSlideKey($event)">
+                                <div class="flex items-center justify-between mb-4">
+                                    <div class="flex items-center gap-2">
+                                        <button @click="prevSlide()" :disabled="currentSlide===0" class="bg-gray-800 hover:bg-gray-700 disabled:opacity-30 text-white px-3 py-1.5 rounded-lg text-sm transition">← Prev</button>
+                                        <span class="text-sm text-gray-400"><span x-text="currentSlide+1"></span> / <span x-text="parsedSlides.length"></span></span>
+                                        <button @click="nextSlide()" :disabled="currentSlide>=parsedSlides.length-1" class="bg-gray-800 hover:bg-gray-700 disabled:opacity-30 text-white px-3 py-1.5 rounded-lg text-sm transition">Next →</button>
+                                        <input type="number" min="1" :max="parsedSlides.length" placeholder="#" @keydown.enter="goToSlide($event.target.value); $event.target.value=''" class="w-14 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-xs text-center text-white focus:outline-none focus:border-purple-500">
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <button @click="slideFullscreen=!slideFullscreen" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg transition">⛶ Fullscreen</button>
+                                        <button @click="downloadPptx()" class="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg flex items-center gap-1">📥 Download PPTX</button>
+                                    </div>
+                                </div>
+                                <div class="bg-gray-900 border border-gray-700 rounded-2xl p-8 min-h-[400px] flex flex-col justify-center shadow-lg touch-swipe"
+                                    style="aspect-ratio:16/9;max-height:70vh"
+                                    @touchstart="handleTouchStart($event)" @touchend="handleTouchEnd($event)">
+                                    <div class="prose prose-invert prose-lg max-w-none slide-animate" x-html="renderMd(parsedSlides[currentSlide] || '')"></div>
+                                </div>
+                                <!-- Slide thumbnails -->
+                                <div class="flex gap-2 mt-4 overflow-x-auto pb-2">
+                                    <template x-for="(s, i) in parsedSlides" :key="i">
+                                        <button @click="currentSlide=i" :class="i===currentSlide ? 'border-purple-500 bg-gray-800' : 'border-gray-700 bg-gray-900 hover:bg-gray-800'" class="border rounded-lg p-2 text-[10px] text-gray-400 w-28 h-16 shrink-0 overflow-hidden text-left leading-tight transition" x-text="s.split('\\n')[0].replace(/^#+\\s*/,'').slice(0,40)"></button>
+                                    </template>
+                                </div>
+                                <p class="text-[10px] text-gray-600 mt-2">Keys: ←/→ navigate · F fullscreen · Esc exit</p>
+                                <!-- Fullscreen overlay -->
+                                <div x-show="slideFullscreen" class="slide-fullscreen" @keydown.escape.window="slideFullscreen=false">
+                                    <div class="slide-content">
+                                        <div class="prose prose-invert prose-xl max-w-none" x-html="renderMd(parsedSlides[currentSlide] || '')"></div>
+                                    </div>
+                                    <div class="mt-6 flex items-center gap-4">
+                                        <button @click="prevSlide()" :disabled="currentSlide===0" class="bg-gray-800 hover:bg-gray-700 disabled:opacity-30 text-white px-4 py-2 rounded-lg transition">← Prev</button>
+                                        <span class="text-gray-400"><span x-text="currentSlide+1"></span> / <span x-text="parsedSlides.length"></span></span>
+                                        <button @click="nextSlide()" :disabled="currentSlide>=parsedSlides.length-1" class="bg-gray-800 hover:bg-gray-700 disabled:opacity-30 text-white px-4 py-2 rounded-lg transition">Next →</button>
+                                        <button @click="slideFullscreen=false" class="ml-4 text-gray-500 hover:text-white text-sm">✕ Exit</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                        <!-- Overview with collapsible sections -->
+                        <template x-if="viewingGenerated && viewingGenerated.kind==='overview'">
+                            <div class="prose prose-invert prose-sm max-w-none overview-content" x-html="renderOverview(viewingContent)"></div>
+                        </template>
+                        <!-- Podcast conversation view -->
+                        <template x-if="viewingGenerated && viewingGenerated.kind==='podcast'">
+                            <div x-html="renderPodcast(viewingContent)"></div>
+                        </template>
+                        <!-- Inline upgrade prompt -->
+                        <template x-if="viewingGenerated && viewingGenerated.kind==='upgrade'">
+                            <div class="flex flex-col items-center justify-center min-h-[400px] text-center">
+                                <div class="text-6xl mb-4">🪙</div>
+                                <h2 class="text-2xl font-bold text-white mb-2">You're out of tokens</h2>
+                                <p class="text-gray-400 mb-2">You need <span class="text-white font-semibold" x-text="insufficientTokensInfo?.required"></span> tokens but have <span class="text-yellow-400 font-semibold" x-text="insufficientTokensInfo?.balance"></span>.</p>
+                                <div class="flex gap-3 mt-4">
+                                    <button @click="showTokenShop=true" class="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-semibold px-8 py-3 rounded-xl transition">Buy Tokens</button>
+                                    <a href="/pricing" class="bg-gray-800 hover:bg-gray-700 text-white font-semibold px-8 py-3 rounded-xl border border-gray-700 transition">View Plans</a>
+                                </div>
+                                <p class="text-xs text-gray-600 mt-6">Tokens never expire. First purchase removes ads.</p>
+                            </div>
+                        </template>
+                        <!-- Generic generated content -->
+                        <div x-show="viewingGenerated && viewingGenerated.kind!=='slides' && viewingGenerated.kind!=='overview' && viewingGenerated.kind!=='podcast' && viewingGenerated.kind!=='upgrade'" class="prose prose-invert prose-sm max-w-none" x-html="renderMd(viewingContent)"></div>
+                        <!-- Code skeleton while loading -->
+                        <div x-show="!viewingGenerated && !fileContent && currentFile" class="bg-gray-900 rounded-lg p-4 code-skeleton">
+                            <template x-for="i in 20" :key="'cs'+i">
+                                <div class="skel-line skeleton" :style="'width:'+(20+Math.random()*70)+'%'"></div>
+                            </template>
+                        </div>
+                        <pre x-show="!viewingGenerated && fileContent" class="bg-gray-900 rounded-lg p-4 text-sm overflow-x-auto"><code x-html="highlightCode(fileContent, currentFile)"></code></pre>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Immersive mode -->
+            <div x-show="mode==='immersive'" class="flex-1 flex overflow-hidden">
+                <div class="flex-1 overflow-y-auto p-4" @mouseup="handleSelection()">
+                    <template x-if="currentFile && fileContent">
+                        <div>
+                            <div class="flex items-center gap-3 mb-3">
+                                <h3 class="text-sm font-mono text-gray-300" x-text="currentFile"></h3>
+                                <span class="text-xs text-purple-400 bg-purple-900/30 px-2 py-0.5 rounded">Highlight text to ask about it</span>
+                            </div>
+                            <pre class="bg-gray-900 rounded-lg p-4 text-sm overflow-x-auto leading-relaxed"><code x-html="highlightCode(fileContent, currentFile)"></code></pre>
+                        </div>
+                    </template>
+                </div>
+                <div class="w-80 border-l border-gray-800 flex flex-col shrink-0 h-full min-h-0">
+                    <div class="px-3 py-2 border-b border-gray-800 text-xs text-gray-500 font-medium uppercase tracking-wider" x-text="selectedText ? 'Ask about selection' : 'Ask about this file'"></div>
+                    <div x-show="selectedText" class="px-3 py-2 border-b border-gray-800 bg-purple-900/20 flex items-start gap-2">
+                        <div class="flex-1 min-w-0">
+                            <p class="text-xs text-purple-300 mb-1">Selected:</p>
+                            <p class="text-xs text-gray-300 font-mono line-clamp-3" x-text="selectedText"></p>
+                        </div>
+                        <button @click="selectedText=''" class="text-gray-500 hover:text-white text-sm shrink-0 mt-0.5">✕</button>
+                    </div>
+                    <div class="flex-1 overflow-y-auto min-h-0 p-3 space-y-3">
+                        <template x-for="(msg, i) in immersiveMessages" :key="i">
+                            <div :class="msg.role==='user' ? 'bg-purple-900/30 border-purple-800' : 'bg-gray-900 border-gray-800'" class="border rounded-lg px-3 py-2 text-sm">
+                                <div x-show="msg.role==='user'" class="text-white text-xs" x-text="msg.text"></div>
+                                <div x-show="msg.role==='assistant'" class="prose prose-invert prose-xs max-w-none" x-html="renderMd(msg.text)"></div>
+                                <div x-show="msg.role==='loading'" class="flex items-center gap-2 text-gray-400 text-xs"><span class="spinner"></span></div>
+                            </div>
+                        </template>
+                    </div>
+                    <div class="border-t border-gray-800 p-2">
+                        <div class="flex gap-1">
+                            <input x-model="immersiveInput" type="text" :placeholder="selectedText ? 'Ask about selection...' : 'Ask about this file...'"
+                                @keydown.enter="sendImmersive()"
+                                class="flex-1 bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-purple-500">
+                            <button @click="sendImmersive()" class="bg-purple-600 hover:bg-purple-500 px-2 py-1.5 rounded text-xs">Ask</button>
+                        </div>
+                        <div class="flex gap-1 mt-1">
+                            <button @click="immersiveInput='Explain this';sendImmersive()" class="text-[10px] text-gray-500 hover:text-purple-400 bg-gray-900 px-2 py-1 rounded">Explain</button>
+                            <button @click="immersiveInput='Why is it done this way?';sendImmersive()" class="text-[10px] text-gray-500 hover:text-purple-400 bg-gray-900 px-2 py-1 rounded">Why?</button>
+                            <button @click="immersiveInput='How could this be improved?';sendImmersive()" class="text-[10px] text-gray-500 hover:text-purple-400 bg-gray-900 px-2 py-1 rounded">Improve?</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT: Generate panel (desktop) -->
+        <div class="w-72 border-l border-gray-800 flex flex-col shrink-0 bg-gray-950 desktop-only">
+            <div class="px-3 py-2 border-b border-gray-800 text-xs text-gray-500 font-medium uppercase tracking-wider">Generate</div>
+            <div class="p-3 space-y-2">
+                <button @click="doGenerate('overview')" :disabled="generating || exampleLoaded"
+                    class="w-full text-left bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg p-3 transition disabled:opacity-50">
+                    <div class="flex items-center gap-2 text-sm font-medium">📖 Overview <span class="text-yellow-400 text-xs">(10 🪙)</span></div>
+                    <p class="text-xs text-gray-500 mt-1">Architecture, concepts, how it works</p>
+                </button>
+                <button @click="doGenerate('podcast')" :disabled="generating || exampleLoaded"
+                    class="w-full text-left bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg p-3 transition disabled:opacity-50">
+                    <div class="flex items-center gap-2 text-sm font-medium">🎙️ Podcast Script <span class="text-yellow-400 text-xs">(20 🪙)</span></div>
+                    <p class="text-xs text-gray-500 mt-1">Two-host conversation about the codebase</p>
+                </button>
+                <button @click="doGenerate('slides')" :disabled="generating || exampleLoaded"
+                    class="w-full text-left bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg p-3 transition disabled:opacity-50">
+                    <div class="flex items-center gap-2 text-sm font-medium">📊 Slide Deck <span class="text-yellow-400 text-xs">(15 🪙)</span></div>
+                    <p class="text-xs text-gray-500 mt-1">Presentation-ready breakdown</p>
+                </button>
+            </div>
+            
+            <div x-show="generating" class="px-3 py-2">
+                <div class="flex items-center gap-2 text-sm text-purple-400">
+                    <span class="spinner"></span><span x-text="genMessage"></span>
+                    <span x-show="fromCache" class="text-[10px] bg-yellow-900/30 text-yellow-400 px-2 py-0.5 rounded">⚡ Cached</span>
+                </div>
+                <div class="flex items-center gap-2 mt-1">
+                    <span class="text-[10px] text-gray-500" x-text="streamWordCount + ' words · ' + streamElapsed + 's'"></span>
+                    <button @click="stopGenerating()" class="text-[10px] text-red-400 hover:text-red-300 bg-red-900/20 border border-red-800/30 px-2 py-0.5 rounded">■ Stop</button>
+                </div>
+            </div>
+
+            <div class="flex-1 overflow-y-auto px-3 py-2 space-y-2">
+                <template x-for="(item, i) in generated" :key="i">
+                    <button @click="viewGenerated(item)" class="w-full text-left bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg p-2 transition">
+                        <div class="text-xs font-medium text-purple-300" x-text="item.kind.charAt(0).toUpperCase()+item.kind.slice(1)"></div>
+                        <div class="text-[10px] text-gray-500 mt-0.5" x-text="item.depth + ' · ' + item.expertise"></div>
+                    </button>
+                </template>
+            </div>
+            <!-- Sidebar ad (free users) -->
+            <!-- Carbon Ad: Sidebar (primary placement — Carbon allows 1 per page) -->
+            <div x-show="showAds" class="px-3 py-2 shrink-0" x-init="if(showAds && carbonConfigured) loadCarbonAd($el, 'sidebar')">
+            </div>
+        </div>
+
+        <!-- Mobile file drawer -->
+        <div class="mobile-sidebar" :class="mobileDrawer==='files' ? 'open' : ''">
+            <div class="px-3 py-2 border-b border-gray-800 flex items-center justify-between">
+                <span class="text-xs text-gray-500 font-medium uppercase tracking-wider">Files</span>
+                <button @click="mobileDrawer=null" class="text-gray-500 hover:text-white text-sm">✕</button>
+            </div>
+            <div class="flex-1 overflow-y-auto file-tree p-2" style="height:calc(100vh - 40px)">
+                <template x-for="f in files" :key="'m'+f.path">
+                    <button @click="openFile(f.path);mobileDrawer=null"
+                        :class="currentFile===f.path ? 'bg-purple-900/30 text-purple-300' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-900'"
+                        class="w-full text-left text-xs px-2 py-1.5 rounded flex items-center gap-2 transition">
+                        <span :class="f.is_priority ? 'text-yellow-500' : 'text-gray-600'" x-text="f.is_priority ? '★' : '·'"></span>
+                        <span class="truncate" x-text="f.path"></span>
+                    </button>
+                </template>
+            </div>
+        </div>
+
+        <!-- Mobile generate drawer -->
+        <div class="mobile-generate" :class="mobileDrawer==='generate' ? 'open' : ''">
+            <div class="px-3 py-2 border-b border-gray-800 flex items-center justify-between">
+                <span class="text-xs text-gray-500 font-medium uppercase tracking-wider">Generate</span>
+                <button @click="mobileDrawer=null" class="text-gray-500 hover:text-white text-sm">✕</button>
+            </div>
+            <div class="p-3 space-y-2">
+                <button @click="doGenerate('overview');mobileDrawer=null" :disabled="generating || exampleLoaded"
+                    class="w-full text-left bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg p-3 transition disabled:opacity-50">
+                    <div class="flex items-center gap-2 text-sm font-medium">📖 Overview</div>
+                </button>
+                <button @click="doGenerate('podcast');mobileDrawer=null" :disabled="generating || exampleLoaded"
+                    class="w-full text-left bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg p-3 transition disabled:opacity-50">
+                    <div class="flex items-center gap-2 text-sm font-medium">🎙️ Podcast</div>
+                </button>
+                <button @click="doGenerate('slides');mobileDrawer=null" :disabled="generating || exampleLoaded"
+                    class="w-full text-left bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg p-3 transition disabled:opacity-50">
+                    <div class="flex items-center gap-2 text-sm font-medium">📊 Slides</div>
+                </button>
+            </div>
+            <div class="px-3 py-2 space-y-2">
+                <template x-for="(item, i) in generated" :key="'mg'+i">
+                    <button @click="viewGenerated(item);mobileDrawer=null" class="w-full text-left bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg p-2 transition">
+                        <div class="text-xs font-medium text-purple-300" x-text="item.kind.charAt(0).toUpperCase()+item.kind.slice(1)"></div>
+                    </button>
+                </template>
+            </div>
+        </div>
+
+        <!-- Mobile tab bar -->
+        <div class="mobile-tab-bar">
+            <button @click="mobileDrawer=mobileDrawer==='files'?null:'files'" :class="mobileDrawer==='files'?'active':''">
+                <span class="tab-icon">📁</span><span>Files</span>
+            </button>
+            <button @click="mobileDrawer=null;mode='chat'" :class="mode==='chat'&&!mobileDrawer?'active':''">
+                <span class="tab-icon">💬</span><span>Chat</span>
+            </button>
+            <button @click="mobileDrawer=null;mode='viewer'" :class="mode==='viewer'&&!mobileDrawer?'active':''">
+                <span class="tab-icon">📄</span><span>Viewer</span>
+            </button>
+            <button @click="mobileDrawer=mobileDrawer==='generate'?null:'generate'" :class="mobileDrawer==='generate'?'active':''">
+                <span class="tab-icon">🚀</span><span>Generate</span>
+            </button>
+        </div>
+
+    </div>
+</template>
+
+</div>
+
+<script>
+function repolm() {
+    return {
+        urlInput: '',
+        repoId: null,
+        repoData: {},
+        repoReady: false,
+        repoError: null,
+        repoMessage: '',
+        loadingRepo: false,
+        loadingFiles: false,
+        files: [],
+        currentFile: null,
+        fileContent: null,
+        mode: 'chat',
+        depth: 'high-level',
+        expertise: 'amateur',
+        messages: [],
+        chatInput: '',
+        chatLoading: false,
+        selectedText: '',
+        immersiveMessages: [],
+        immersiveInput: '',
+        generating: false,
+        genMessage: '',
+        generated: [],
+        viewingGenerated: null,
+        viewingContent: '',
+        audioGenerating: false,
+        audioUrl: null,
+        exampleLoaded: false,
+        exampleData: {},
+        parsedSlides: [],
+        currentSlide: 0,
+        slideFullscreen: false,
+        streamWordCount: 0,
+        streamElapsed: 0,
+        streamTimer: null,
+        streamAbortController: null,
+        copyLabel: '📋 Copy',
+        audioProgressText: 'Generating audio...',
+        mobileDrawer: null,  // 'files' | 'generate' | null
+        slideDirection: 'right',  // for slide animation
+        touchStartX: 0,
+        user: null,
+        authChecked: false,
+        showAuthModal: false,
+        authMode: 'login',
+        authEmail: '',
+        authPassword: '',
+        authUsername: '',
+        authError: '',
+        authLoading: false,
+        savedRepos: [],
+        savedDbId: null,
+        showTokenShop: false,
+        showInsufficientModal: false,
+        insufficientTokensInfo: null,
+        checkoutSuccess: false,
+        userTokens: 0,
+        userHasPurchased: false,
+
+        // Achievement & engagement state
+        achievementPopup: null,
+        achievements: [],
+        showFirstFreeBanner: false,
+        streakCount: 0,
+
+        get showAds() { return !this.user || !this.userHasPurchased; },
+        get carbonConfigured() { return window.CARBON_SERVE && !window.CARBON_SERVE.includes('__'); },
+
+        loadCarbonAd(el, placement) {
+            if (!this.carbonConfigured || el.querySelector('#carbonads')) return;
+            const s = document.createElement('script');
+            s.id = '_carbonads_js';
+            s.src = `//cdn.carbonads.com/carbon.js?serve=${window.CARBON_SERVE}&placement=${window.CARBON_PLACEMENT}`;
+            s.async = true;
+            el.appendChild(s);
+        },
+        get isPro() { return false; },
+
+        // Onboarding tour state
+        showTour: false,
+        tourStep: 0,
+        tourSteps: [
+            {title: 'Paste a Repo URL', desc: 'Enter any GitHub or GitLab repo URL to get started.', target: 'tour-url-input'},
+            {title: 'Choose Your Level', desc: 'Set depth (high/low) and expertise (beginner to expert) — content adapts to you.', target: 'tour-level'},
+            {title: 'Generate Content', desc: 'Create overviews, podcast scripts, or slide decks from the code.', target: 'tour-generate'},
+            {title: 'Chat with the Code', desc: 'Ask questions, highlight code in Immersive mode, and explore interactively.', target: 'tour-chat'},
+        ],
+        // Concept Lab state
+        showConceptLab: false,
+        conceptInput: '',
+        conceptLanguage: 'Python',
+        conceptDifficulty: 'intermediate',
+        conceptGenerating: false,
+        conceptStatus: '',
+        // Cache indicator
+        fromCache: false,
+        // Server status
+        serverStatus: 'green',  // green/yellow/red
+        serverPressure: 'low',
+        serverStatusText: '',
+        queuePosition: null,
+        busyRetrying: false,
+        busyRetryCount: 0,
+
+        init() {
+            // Start server health polling
+            this._healthInterval = setInterval(() => this.checkServerHealth(), 30000);
+            this.checkServerHealth();
+            this.checkAuth();
+            const params = new URLSearchParams(window.location.search);
+            const exSlug = params.get('example');
+            if (exSlug) this.loadExample(exSlug);
+            const urlParam = params.get('url');
+            if (urlParam) {
+                this.urlInput = urlParam;
+                window.history.replaceState({}, '', '/app');
+                this.loadRepo();
+            }
+            if (params.get('checkout') === 'success') {
+                this.checkoutSuccess = true;
+                window.history.replaceState({}, '', '/app');
+                setTimeout(() => { this.checkoutSuccess = false; this.refreshTokens(); }, 2000);
+            }
+            // Onboarding tour for first-time visitors
+            if (!localStorage.getItem('repolm_tour_done')) {
+                setTimeout(() => { this.showTour = true; }, 500);
+            }
+            this.updateStreak();
+            this.loadAchievements();
+        },
+
+        async checkServerHealth() {
+            try {
+                const res = await fetch('/health');
+                const data = await res.json();
+                this.serverPressure = data.pressure || 'low';
+                if (data.status === 'ok' && data.pressure === 'low') {
+                    this.serverStatus = 'green';
+                    this.serverStatusText = '';
+                } else if (data.pressure === 'high' || data.status === 'degraded') {
+                    this.serverStatus = 'red';
+                    this.serverStatusText = 'High demand';
+                } else {
+                    this.serverStatus = 'yellow';
+                    this.serverStatusText = 'Moderate load';
+                }
+            } catch(e) {
+                this.serverStatus = 'red';
+                this.serverStatusText = 'Connection issue';
+            }
+        },
+
+        async fetchWithRetry(url, options = {}, maxRetries = 3) {
+            const delays = [5000, 10000, 20000];
+            for (let attempt = 0; attempt <= maxRetries; attempt++) {
+                try {
+                    const res = await fetch(url, options);
+                    if (res.status === 503 && attempt < maxRetries) {
+                        this.busyRetrying = true;
+                        this.busyRetryCount = attempt + 1;
+                        const data = await res.json().catch(() => ({}));
+                        this.serverStatusText = data.error || 'High demand — retrying...';
+                        await new Promise(r => setTimeout(r, delays[attempt]));
+                        continue;
+                    }
+                    this.busyRetrying = false;
+                    this.busyRetryCount = 0;
+                    return res;
+                } catch(e) {
+                    if (attempt < maxRetries) {
+                        this.busyRetrying = true;
+                        this.busyRetryCount = attempt + 1;
+                        await new Promise(r => setTimeout(r, delays[attempt]));
+                        continue;
+                    }
+                    this.busyRetrying = false;
+                    throw e;
+                }
+            }
+        },
+
+        async submitAuth() {
+            this.authError = '';
+            this.authLoading = true;
+            const endpoint = this.authMode === 'login' ? '/auth/login' : '/auth/signup';
+            const body = {email: this.authEmail, password: this.authPassword};
+            if (this.authMode === 'signup') body.username = this.authUsername;
+            try {
+                const res = await fetch(endpoint, {
+                    method: 'POST', headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+                if (!res.ok) { this.authError = data.error || 'Something went wrong'; this.authLoading = false; return; }
+                this.showAuthModal = false;
+                this.authEmail = ''; this.authPassword = ''; this.authUsername = '';
+                await this.checkAuth();
+            } catch(e) { this.authError = 'Connection failed'; }
+            this.authLoading = false;
+        },
+
+        async checkAuth() {
+            try {
+                const res = await fetch('/auth/me');
+                const data = await res.json();
+                this.user = data.user;
+                if (this.user) {
+                    this.userTokens = data.user.tokens || 0;
+                    this.userHasPurchased = data.user.has_purchased || false;
+                    this.loadSavedRepos();
+                }
+            } catch(e) {}
+            this.authChecked = true;
+        },
+
+        async refreshTokens() {
+            try {
+                const res = await fetch('/auth/me');
+                const data = await res.json();
+                if (data.user) {
+                    this.userTokens = data.user.tokens || 0;
+                    this.userHasPurchased = data.user.has_purchased || false;
+                }
+            } catch(e) {}
+        },
+
+        async buyPack(pack) {
+            try {
+                const res = await fetch('/api/checkout', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({pack})});
+                const data = await res.json();
+                if (data.url) window.location.href = data.url;
+                else if (data.error) alert(data.error);
+            } catch(e) { alert('Failed to start checkout'); }
+        },
+
+        handleInsufficientTokens(required, balance) {
+            this.insufficientTokensInfo = {required, balance};
+            // Show inline upgrade prompt in viewer instead of modal
+            this.mode = 'viewer';
+            this.viewingGenerated = {kind: 'upgrade', label: '🪙 Upgrade'};
+            this.viewingContent = '';
+            this.showInsufficientModal = false;
+        },
+
+        async loadSavedRepos() {
+            try {
+                const res = await fetch('/api/my/repos');
+                if (res.ok) this.savedRepos = await res.json();
+            } catch(e) {}
+        },
+
+        async saveRepo() {
+            if (!this.repoId || !this.user) return;
+            try {
+                const res = await fetch(`/api/my/repos/${this.repoId}/save`, {method:'POST'});
+                const data = await res.json();
+                if (data.db_id) {
+                    this.savedDbId = data.db_id;
+                    this.loadSavedRepos();
+                }
+            } catch(e) {}
+        },
+
+        async loadSavedRepo(dbId) {
+            this.loadingRepo = true;
+            try {
+                const res = await fetch(`/api/my/repos/${dbId}`);
+                const data = await res.json();
+                if (data.repo_id) {
+                    this.repoId = data.repo_id;
+                    this.repoData = data.data;
+                    this.savedDbId = dbId;
+                    this.repoReady = true;
+                    this.loadingRepo = false;
+                    // Load file index (no content — need to load individually or re-clone)
+                    this.files = data.file_index || [];
+                    // Load saved chat history
+                    const chatRes = await fetch(`/api/my/repos/${dbId}/chats`);
+                    if (chatRes.ok) {
+                        const chats = await chatRes.json();
+                        this.messages = chats.map(c => ({role: c.role, text: c.message}));
+                    }
+                    // Load saved generated content
+                    const genRes = await fetch(`/api/my/repos/${dbId}/generated`);
+                    if (genRes.ok) {
+                        const gens = await genRes.json();
+                        this.generated = gens.map(g => ({kind:g.kind, depth:g.depth, expertise:g.expertise, content:g.content}));
+                    }
+                }
+            } catch(e) { this.repoError = 'Failed to load saved repo'; }
+            this.loadingRepo = false;
+        },
+
+        async deleteSavedRepo(dbId) {
+            if (!confirm('Delete this saved repo?')) return;
+            await fetch(`/api/my/repos/${dbId}`, {method:'DELETE'});
+            this.savedRepos = this.savedRepos.filter(r => r.id !== dbId);
+        },
+
+        async loadExample(slug) {
+            try {
+                const res = await fetch(`/api/examples/${slug}`);
+                if (!res.ok) return;
+                const data = await res.json();
+                this.exampleLoaded = true;
+                this.exampleData = data;
+                this.repoData = { name: data.name, file_count: 0, languages: {} };
+                this.files = [];
+                // Load pre-generated content
+                if (data.overview) this.generated.push({kind:'overview', depth:data.depth||'high-level', expertise:data.expertise||'amateur', content:data.overview});
+                if (data.podcast) this.generated.push({kind:'podcast', depth:data.depth||'high-level', expertise:data.expertise||'amateur', content:data.podcast});
+                if (this.generated.length) this.viewGenerated(this.generated[0]);
+            } catch(e) { console.error(e); }
+        },
+
+        async handleFolderUpload(event) {
+            const files = event.target.files;
+            if (!files || files.length === 0) return;
+            await this.uploadFiles(files);
+        },
+
+        async handleDrop(event) {
+            // Handle drag & drop of folders
+            const items = event.dataTransfer.items;
+            if (!items) return;
+            const files = event.dataTransfer.files;
+            if (files.length > 0) await this.uploadFiles(files);
+        },
+
+        async uploadFiles(files) {
+            this.loadingRepo = true;
+            this.repoError = null;
+            const formData = new FormData();
+            for (const file of files) {
+                // webkitRelativePath gives us folder/path/file.ext
+                const path = file.webkitRelativePath || file.name;
+                formData.append(path, file, path);
+            }
+            try {
+                const res = await fetch('/api/upload', {method: 'POST', body: formData});
+                const data = await res.json();
+                if (data.error) { this.repoError = data.error; this.loadingRepo = false; return; }
+                this.repoId = data.repo_id;
+                this.pollRepo();
+            } catch(e) {
+                this.repoError = 'Upload failed';
+                this.loadingRepo = false;
+            }
+        },
+
+        async loadRepo() {
+            let url = this.urlInput.trim();
+            if (!url) return;
+            if (!url.startsWith('http')) url = 'https://github.com/' + url;
+            this.loadingRepo = true;
+            this.repoError = null;
+            try {
+                const res = await this.fetchWithRetry('/api/repo', {
+                    method: 'POST',
+                    headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({url})
+                });
+                const data = await res.json();
+                if (res.status === 402) { this.handleInsufficientTokens(data.required, data.balance); this.loadingRepo = false; return; }
+                if (data.error) { this.repoError = data.error; this.loadingRepo = false; return; }
+                this.repoId = data.repo_id;
+                if (data.queued && data.queue_position) {
+                    this.queuePosition = data.queue_position;
+                    this.repoMessage = `Queued (#${data.queue_position})...`;
+                }
+                this.pollRepo();
+            } catch(e) {
+                this.repoError = 'Failed to connect to server';
+                this.loadingRepo = false;
+            }
+        },
+
+        async pollRepo() {
+            const iv = setInterval(async () => {
+                try {
+                    const res = await fetch(`/api/repo/${this.repoId}`);
+                    const data = await res.json();
+                    if (data.queue_position) {
+                        this.queuePosition = data.queue_position;
+                        this.repoMessage = `⏳ Queued (#${data.queue_position})...`;
+                    } else {
+                        this.queuePosition = null;
+                        this.repoMessage = data.message;
+                    }
+                    this.repoData = data.data || {};
+                    if (data.status === 'ready') {
+                        clearInterval(iv);
+                        this.repoReady = true;
+                        this.loadingRepo = false;
+                        this.loadFiles();
+                    } else if (data.status === 'error') {
+                        clearInterval(iv);
+                        this.repoError = data.message;
+                        this.repoId = null;
+                        this.loadingRepo = false;
+                    }
+                } catch(e) {
+                    clearInterval(iv);
+                    this.repoError = 'Connection lost';
+                    this.loadingRepo = false;
+                }
+            }, 1500);
+        },
+
+        async loadFiles() {
+            this.loadingFiles = true;
+            try {
+                const res = await fetch(`/api/repo/${this.repoId}/files`);
+                this.files = await res.json();
+            } catch(e) {}
+            this.loadingFiles = false;
+        },
+
+        async openFile(path) {
+            this.currentFile = path;
+            this.fileContent = null;  // trigger skeleton
+            this.viewingGenerated = null;
+            this.audioUrl = null;
+            try {
+                const res = await fetch(`/api/repo/${this.repoId}/file?path=${encodeURIComponent(path)}`);
+                const data = await res.json();
+                this.fileContent = data.content;
+            } catch(e) { this.fileContent = 'Failed to load file'; }
+            if (this.mode === 'chat') this.mode = 'viewer';
+        },
+
+        async sendChat() {
+            const text = this.chatInput.trim();
+            if (!text || this.chatLoading) return;
+            this.chatInput = '';
+            this.messages.push({role:'user', text});
+            this.messages.push({role:'assistant', text:''});
+            this.chatLoading = true;
+            this.scrollChat();
+            const msgIdx = this.messages.length - 1;
+            try {
+                // Build conversation history from previous messages (last 6 exchanges = 12 messages)
+                const history = this.messages.slice(0, -1)  // exclude the empty assistant msg we just pushed
+                    .filter(m => m.role === 'user' || (m.role === 'assistant' && m.text))
+                    .slice(-12)
+                    .map(m => ({role: m.role, content: m.text}));
+                const res = await fetch(`/api/repo/${this.repoId}/chat-stream`, {
+                    method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({message:text, depth:this.depth, expertise:this.expertise, history})
+                });
+                if (res.status === 402) {
+                    const data = await res.json();
+                    this.messages.pop();
+                    this.handleInsufficientTokens(data.required, data.balance);
+                    this.chatLoading = false;
+                    return;
+                }
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                while (true) {
+                    const {done, value} = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, {stream:true});
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+                    let eventType = null;
+                    for (const line of lines) {
+                        if (line.startsWith('event: ')) eventType = line.slice(7);
+                        else if (line.startsWith('data: ')) {
+                            const payload = JSON.parse(line.slice(6));
+                            if (eventType === 'chunk') {
+                                this.messages[msgIdx].text += payload;
+                                this.scrollChat();
+                            } else if (eventType === 'meta') {
+                                try {
+                                    const meta = JSON.parse(payload);
+                                    if (meta.balance !== undefined && meta.balance !== null) this.userTokens = meta.balance;
+                                } catch(e) {}
+                            } else if (eventType === 'error') {
+                                this.messages[msgIdx].text += '\n\nError: ' + payload;
+                            }
+                        }
+                    }
+                }
+                const reply = this.messages[msgIdx].text;
+                if (this.user && this.savedDbId) {
+                    fetch(`/api/my/repos/${this.savedDbId}/chat`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({role:'user', message:text})});
+                    fetch(`/api/my/repos/${this.savedDbId}/chat`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({role:'assistant', message:reply})});
+                }
+            } catch(e) {
+                this.messages[msgIdx].text = 'Error: Failed to get response. Please try again.';
+            }
+            this.chatLoading = false;
+            this.scrollChat();
+            this.$nextTick(() => document.querySelectorAll('.chat-area pre code').forEach(el => hljs.highlightElement(el)));
+        },
+
+        handleSelection() {
+            const sel = window.getSelection().toString().trim();
+            if (sel.length > 5) this.selectedText = sel;
+        },
+
+        async sendImmersive() {
+            const text = this.immersiveInput.trim() || 'Explain this';
+            this.immersiveInput = '';
+            this.immersiveMessages.push({role:'user', text: (this.selectedText ? `[${this.selectedText.slice(0,80)}...]\n` : '') + text});
+            this.immersiveMessages.push({role:'assistant', text:''});
+            const msgIdx = this.immersiveMessages.length - 1;
+            try {
+                const res = await fetch(`/api/repo/${this.repoId}/chat-stream`, {
+                    method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({message:text, depth:this.depth, expertise:this.expertise, selection:this.selectedText, file_path:this.currentFile})
+                });
+                if (res.status === 402) {
+                    const data = await res.json();
+                    this.immersiveMessages.pop();
+                    this.handleInsufficientTokens(data.required, data.balance);
+                    return;
+                }
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                while (true) {
+                    const {done, value} = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, {stream:true});
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+                    let eventType = null;
+                    for (const line of lines) {
+                        if (line.startsWith('event: ')) eventType = line.slice(7);
+                        else if (line.startsWith('data: ')) {
+                            const payload = JSON.parse(line.slice(6));
+                            if (eventType === 'chunk') {
+                                this.immersiveMessages[msgIdx].text += payload;
+                            } else if (eventType === 'meta') {
+                                try { const meta = JSON.parse(payload); if (meta.balance !== undefined) this.userTokens = meta.balance; } catch(e) {}
+                            }
+                        }
+                    }
+                }
+            } catch(e) {
+                this.immersiveMessages[msgIdx].text = 'Error: request failed';
+            }
+            this.$nextTick(() => document.querySelectorAll('.prose pre code').forEach(el => hljs.highlightElement(el)));
+        },
+
+        async doGenerate(kind) {
+            this.generating = true;
+            this.genMessage = `Generating ${kind}...`;
+            this.streamWordCount = 0;
+            this.streamElapsed = 0;
+            const startTime = Date.now();
+            this.streamTimer = setInterval(() => { this.streamElapsed = Math.round((Date.now() - startTime) / 1000); }, 1000);
+            this.streamAbortController = new AbortController();
+            // Switch to viewer and show streaming content
+            this.mode = 'viewer';
+            this.viewingGenerated = {kind, label: '📄 ' + kind.charAt(0).toUpperCase() + kind.slice(1)};
+            this.viewingContent = '';
+            this.currentFile = null;
+            this.audioUrl = null;
+            this.currentSlide = 0;
+            this.parsedSlides = [];
+            this.fromCache = false;
+
+            try {
+                const res = await this.fetchWithRetry(`/api/repo/${this.repoId}/generate-stream`, {
+                    method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({kind, depth:this.depth, expertise:this.expertise}),
+                    signal: this.streamAbortController.signal
+                });
+                if (res.status === 402) {
+                    const data = await res.json();
+                    this.generating = false;
+                    if (this.streamTimer) { clearInterval(this.streamTimer); this.streamTimer = null; }
+                    this.handleInsufficientTokens(data.required, data.balance);
+                    return;
+                }
+                if (res.status === 401) {
+                    const data = await res.json();
+                    this.generating = false;
+                    if (this.streamTimer) { clearInterval(this.streamTimer); this.streamTimer = null; }
+                    if (data.signup_required) {
+                        this.showAuthModal = true;
+                        this.authMode = 'signup';
+                    } else {
+                        this.showAuthModal = true;
+                    }
+                    return;
+                }
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                while (true) {
+                    const {done, value} = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, {stream:true});
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+                    let eventType = null;
+                    for (const line of lines) {
+                        if (line.startsWith('event: ')) eventType = line.slice(7);
+                        else if (line.startsWith('data: ')) {
+                            const payload = JSON.parse(line.slice(6));
+                            if (eventType === 'cached') {
+                                this.fromCache = true;
+                            } else if (eventType === 'achievement') {
+                                try { this.showAchievement(JSON.parse(payload)); } catch(e) {}
+                            } else if (eventType === 'chunk') {
+                                this.viewingContent += payload;
+                                this.streamWordCount = this.viewingContent.split(/\s+/).length;
+                                this.$nextTick(() => {
+                                    const v = document.querySelector('.viewer');
+                                    if (v) v.scrollTop = v.scrollHeight;
+                                    document.querySelectorAll('.viewer .prose pre code').forEach(el => { if(!el.dataset.highlighted) { hljs.highlightElement(el); el.dataset.highlighted='true'; }});
+                                });
+                            } else if (eventType === 'error') {
+                                this.messages.push({role:'assistant', text:'Error: ' + payload});
+                            }
+                        }
+                    }
+                }
+                if (this.streamTimer) { clearInterval(this.streamTimer); this.streamTimer = null; }
+                this.generating = false;
+                this.streamAbortController = null;
+                const item = {kind, depth:this.depth, expertise:this.expertise, content:this.viewingContent};
+                this.generated.push(item);
+                this.trackRepoAnalysis();
+                // Re-render with proper formatting after stream completes
+                if (kind === 'slides') this.parseSlides();
+                // Force re-render for overview (collapsible sections) and podcast (chat bubbles)
+                // by triggering a reactive update
+                const saved = this.viewingContent;
+                this.viewingContent = '';
+                this.$nextTick(() => { this.viewingContent = saved; });
+                // Auto-save
+                if (this.user && this.savedDbId) {
+                    fetch(`/api/my/repos/${this.savedDbId}/generated`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(item)});
+                }
+                this.$nextTick(() => document.querySelectorAll('.viewer .prose pre code').forEach(el => hljs.highlightElement(el)));
+            } catch(e) {
+                if (this.streamTimer) { clearInterval(this.streamTimer); this.streamTimer = null; }
+                this.streamAbortController = null;
+                // If aborted, content is preserved by stopGenerating()
+                if (e.name !== 'AbortError') {
+                    this.generating = false;
+                    // Preserve partial content on disconnect
+                    if (this.viewingContent) {
+                        const item = {kind, depth:this.depth, expertise:this.expertise, content:this.viewingContent};
+                        this.generated.push(item);
+                        if (kind === 'slides') this.parseSlides();
+                    }
+                }
+            }
+        },
+
+        viewGenerated(item) {
+            this.mode = 'viewer';
+            this.viewingGenerated = {kind: item.kind, label: '📄 ' + item.kind.charAt(0).toUpperCase() + item.kind.slice(1)};
+            this.viewingContent = item.content;
+            this.currentFile = null;
+            this.audioUrl = null;
+            this.parsedSlides = [];
+            this.currentSlide = 0;
+            if (item.kind === 'slides') { this.parseSlides(); this.highlightSlides(); }
+            this.$nextTick(() => document.querySelectorAll('.viewer .prose pre code').forEach(el => hljs.highlightElement(el)));
+        },
+
+        parseSlides() {
+            if (!this.viewingContent || !this.viewingContent.trim()) { this.parsedSlides = []; this.currentSlide = 0; return; }
+            const raw = this.viewingContent.split(/\n---+\n/).filter(s => s.trim());
+            // If no --- delimiters found, try splitting by # headings
+            if (raw.length <= 1 && this.viewingContent.includes('\n# ')) {
+                const byHeading = this.viewingContent.split(/\n(?=# )/).filter(s => s.trim());
+                this.parsedSlides = byHeading.length > 1 ? byHeading.map(s => s.trim()) : raw.map(s => s.trim());
+            } else {
+                this.parsedSlides = raw.map(s => s.trim());
+            }
+            this.currentSlide = 0;
+        },
+
+        nextSlide() { if (this.currentSlide < this.parsedSlides.length - 1) { this.slideDirection='right'; this.currentSlide++; this.highlightSlides(); } },
+        prevSlide() { if (this.currentSlide > 0) { this.slideDirection='left'; this.currentSlide--; this.highlightSlides(); } },
+
+        async downloadPptx() {
+            try {
+                const res = await fetch('/api/slides-pptx', {
+                    method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({markdown: this.viewingContent, repo_name: this.repoData.name || 'repo'})
+                });
+                if (!res.ok) { alert('Failed to generate PPTX'); return; }
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = (this.repoData.name || 'repo') + '_slides.pptx'; a.click();
+                URL.revokeObjectURL(url);
+            } catch(e) { alert('PPTX download failed'); }
+        },
+
+        downloadContent() {
+            let content, filename;
+            if (this.viewingGenerated) {
+                content = this.viewingContent;
+                filename = (this.repoData.name || 'repo') + '_' + this.viewingGenerated.kind + '.md';
+            } else {
+                content = this.fileContent;
+                filename = (this.currentFile || 'file').split('/').pop();
+            }
+            const blob = new Blob([content], {type:'text/markdown'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = filename; a.click();
+            URL.revokeObjectURL(url);
+        },
+
+        async generateAudio() {
+            if (!this.viewingContent || this.audioGenerating) return;
+            this.audioGenerating = true;
+            this.audioUrl = null;
+            this.audioProgressText = 'Starting audio generation...';
+            try {
+                const res = await this.fetchWithRetry('/api/podcast-audio', {
+                    method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({script: this.viewingContent})
+                });
+                const data = await res.json();
+                if (data.error) { this.audioGenerating = false; alert(data.error); return; }
+                const audio_id = data.audio_id;
+                if (data.queue_position) { this.audioProgressText = `Queued (#${data.queue_position})...`; }
+                const iv = setInterval(async () => {
+                    try {
+                        const r = await fetch(`/api/podcast-audio/${audio_id}`);
+                        const d = await r.json();
+                        if (d.status === 'done') {
+                            clearInterval(iv);
+                            this.audioUrl = d.url;
+                            this.audioGenerating = false;
+                        } else if (d.status === 'error') {
+                            clearInterval(iv);
+                            this.audioGenerating = false;
+                            alert('Audio generation failed: ' + (d.message || 'unknown error'));
+                        } else if (d.queue_position) {
+                            this.audioProgressText = `⏳ Queued (#${d.queue_position})...`;
+                        } else if (d.progress !== undefined && d.progress !== null) {
+                            let txt = `Generating audio... ${d.progress}/${d.total} segments`;
+                            if (d.eta_seconds !== undefined) {
+                                const eta = d.eta_seconds;
+                                txt += eta > 60 ? ` (~${Math.round(eta/60)}m left)` : ` (~${eta}s left)`;
+                            }
+                            this.audioProgressText = txt;
+                        }
+                    } catch(e) { clearInterval(iv); this.audioGenerating = false; }
+                }, 2000);
+            } catch(e) {
+                this.audioGenerating = false;
+                alert('Failed to start audio generation');
+            }
+        },
+
+        handleSlideKey(e) {
+            if (!this.viewingGenerated || this.viewingGenerated.kind !== 'slides' || this.parsedSlides.length === 0) return;
+            // Don't intercept if typing in an input
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { this.nextSlide(); e.preventDefault(); }
+            else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { this.prevSlide(); e.preventDefault(); }
+            else if (e.key === 'Escape') { if (this.slideFullscreen) this.slideFullscreen = false; else { this.mode = 'chat'; } e.preventDefault(); }
+            else if (e.key === 'f' || e.key === 'F') { this.slideFullscreen = !this.slideFullscreen; e.preventDefault(); }
+        },
+
+        goToSlide(n) {
+            const num = parseInt(n);
+            if (num >= 1 && num <= this.parsedSlides.length) { this.currentSlide = num - 1; this.highlightSlides(); }
+        },
+
+        stopGenerating() {
+            if (this.streamAbortController) {
+                this.streamAbortController.abort();
+                this.streamAbortController = null;
+            }
+            if (this.streamTimer) { clearInterval(this.streamTimer); this.streamTimer = null; }
+            this.generating = false;
+            // Preserve content so far
+            if (this.viewingContent) {
+                const item = {kind: this.viewingGenerated?.kind || 'overview', depth: this.depth, expertise: this.expertise, content: this.viewingContent};
+                this.generated.push(item);
+                if (item.kind === 'slides') this.parseSlides();
+            }
+        },
+
+        async copyContent() {
+            const content = this.viewingGenerated ? this.viewingContent : this.fileContent;
+            if (!content) return;
+            try {
+                await navigator.clipboard.writeText(content);
+                this.copyLabel = '✓ Copied!';
+                setTimeout(() => { this.copyLabel = '📋 Copy'; }, 2000);
+            } catch(e) { this.copyLabel = '✕ Failed'; setTimeout(() => { this.copyLabel = '📋 Copy'; }, 2000); }
+        },
+
+        async shareContent() {
+            if (!this.viewingGenerated || !this.viewingContent) return;
+            try {
+                const res = await fetch('/api/share', {
+                    method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({content: this.viewingContent, kind: this.viewingGenerated.kind, repo_name: this.repoData.name || 'repo'})
+                });
+                const data = await res.json();
+                if (data.url) {
+                    const fullUrl = window.location.origin + data.url;
+                    await navigator.clipboard.writeText(fullUrl);
+                    this.copyLabel = '🔗 Link copied!';
+                    setTimeout(() => { this.copyLabel = '📋 Copy'; }, 3000);
+                }
+            } catch(e) { alert('Failed to create share link'); }
+        },
+
+        async exportAll() {
+            if (this.generated.length === 0) return;
+            try {
+                const res = await fetch('/api/export-all', {
+                    method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({repo_name: this.repoData.name || 'repo', items: this.generated.map(g => ({kind:g.kind, content:g.content}))})
+                });
+                if (!res.ok) { alert('Export failed'); return; }
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = (this.repoData.name || 'repo') + '_repolm.zip'; a.click();
+                URL.revokeObjectURL(url);
+            } catch(e) { alert('Export failed'); }
+        },
+
+        copyTranscript() {
+            if (!this.viewingContent) return;
+            // Clean markdown formatting for plain text transcript
+            let text = this.viewingContent;
+            text = text.replace(/\*\*(.+?)\*\*/g, '$1');
+            text = text.replace(/`(.+?)`/g, '$1');
+            text = text.replace(/\[LAUGHS\]/g, '(laughs)');
+            text = text.replace(/\[PAUSE\]/g, '(pause)');
+            text = text.replace(/\[TYPING SOUNDS\]/g, '');
+            text = text.replace(/\[SOUND:.*?\]/g, '');
+            navigator.clipboard.writeText(text).then(() => {
+                this.copyLabel = '✓ Transcript copied!';
+                setTimeout(() => { this.copyLabel = '📋 Copy'; }, 2000);
+            });
+        },
+
+        handleTouchStart(e) { this.touchStartX = e.touches[0].clientX; },
+        handleTouchEnd(e) {
+            if (!this.viewingGenerated || this.viewingGenerated.kind !== 'slides') return;
+            const diff = e.changedTouches[0].clientX - this.touchStartX;
+            if (Math.abs(diff) > 50) {
+                if (diff < 0) this.nextSlide();
+                else this.prevSlide();
+            }
+        },
+
+        renderPodcast(text) {
+            if (!text) return '';
+            const pattern = /(ALEX|SAM):\s*([\s\S]*?)(?=\n(?:ALEX|SAM):|$)/g;
+            let match;
+            const lines = [];
+            while ((match = pattern.exec(text)) !== null) {
+                lines.push({speaker: match[1], text: match[2].trim()});
+            }
+            if (lines.length === 0) return marked.parse(text); // fallback
+            return lines.map(l => {
+                const isAlex = l.speaker === 'ALEX';
+                const align = isAlex ? '' : 'flex-row-reverse';
+                const bubbleClass = isAlex ? 'podcast-alex' : 'podcast-sam';
+                const avatarBg = isAlex ? 'background:rgba(20,184,166,0.3);color:#5eead4' : 'background:rgba(139,92,246,0.3);color:#c4b5fd';
+                const initial = isAlex ? '🎙️' : '💡';
+                const name = isAlex ? 'Alex' : 'Sam';
+                // Process markdown bold/code in dialogue, and stage directions
+                let html = l.text
+                    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/`(.+?)`/g, '<code class="text-xs bg-gray-800 px-1 rounded">$1</code>')
+                    .replace(/\[(LAUGHS|PAUSE|TYPING SOUNDS)\]/g, '<span class="stage-direction">[$1]</span>')
+                    .replace(/\[SOUND:\s*([^\]]+)\]/g, '<span class="stage-direction">[🔊 $1]</span>')
+                    .replace(/\n/g, '<br>');
+                return `<div class="flex items-start gap-3 mb-3 ${align}">
+                    <div class="podcast-avatar" style="${avatarBg}">${initial}</div>
+                    <div class="flex-1 ${isAlex ? '' : 'flex flex-col items-end'}">
+                        <div class="text-[10px] text-gray-500 mb-1">${name}</div>
+                        <div class="podcast-bubble ${bubbleClass}">${html}</div>
+                    </div>
+                </div>`;
+            }).join('');
+        },
+
+        scrollChat() {
+            this.$nextTick(() => {
+                const el = this.$refs.chatScroll;
+                if (el) el.scrollTop = el.scrollHeight;
+            });
+        },
+
+        highlightCode(code, filename) {
+            if (!code) return '';
+            const ext = (filename||'').split('.').pop();
+            const langMap = {py:'python',js:'javascript',ts:'typescript',rb:'ruby',go:'go',rs:'rust',java:'java',sh:'bash',yml:'yaml',yaml:'yaml',json:'json',md:'markdown',html:'html',css:'css'};
+            const lang = langMap[ext] || ext || 'plaintext';
+            try { return hljs.highlight(code, {language: lang}).value; }
+            catch(e) { return code.replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+        },
+
+        renderMd(text) {
+            if (!text) return '';
+            return marked.parse(text);
+        },
+
+        renderOverview(text) {
+            if (!text) return '';
+            const html = marked.parse(text);
+            const sections = html.split(/(?=<h2)/);
+            return sections.map((section, i) => {
+                const match = section.match(/<h2[^>]*>(.*?)<\/h2>/);
+                if (!match) return section;
+                const title = match[1];
+                const isTldr = title.toLowerCase().includes('tl;dr') || title.toLowerCase().includes('tldr');
+                const icon = {'what this project does':'🎯','architecture':'🏗️','key concepts':'💡','how it works':'⚙️','notable':'✨','tech stack':'🔧','learning':'📚','quick start':'⚡'}
+                const iconKey = Object.keys(icon).find(k => title.toLowerCase().includes(k));
+                const emoji = iconKey ? icon[iconKey] + ' ' : '';
+                if (isTldr) {
+                    return `<div class="mb-6 bg-purple-900/20 border border-purple-800/50 rounded-xl p-4">${section.replace(match[0], '<h2 class="mt-0">' + emoji + title + '</h2>')}</div>`;
+                }
+                return `<details class="mb-4 bg-gray-900/50 border border-gray-800 rounded-xl overflow-hidden" ${i < 4 ? 'open' : ''}>
+                    <summary class="px-4 py-3 cursor-pointer hover:bg-gray-800/50 transition font-semibold text-gray-200">${emoji}${title}</summary>
+                    <div class="px-4 pb-4">${section.replace(match[0], '')}</div>
+                </details>`;
+            }).join('');
+        },
+
+        // ── Onboarding Tour ──
+        nextTourStep() {
+            if (this.tourStep < this.tourSteps.length - 1) this.tourStep++;
+            else this.closeTour();
+        },
+        prevTourStep() { if (this.tourStep > 0) this.tourStep--; },
+        closeTour() {
+            this.showTour = false;
+            localStorage.setItem('repolm_tour_done', '1');
+        },
+        restartTour() { this.tourStep = 0; this.showTour = true; },
+
+        // ── Concept Lab ──
+        async startConceptLab() {
+            if (!this.user) { this.showAuthModal = true; return; }
+            const concept = this.conceptInput.trim();
+            if (!concept) return;
+            this.conceptGenerating = true;
+            this.conceptStatus = 'Building your learning repo...';
+            try {
+                const res = await fetch('/api/concept-lab', {
+                    method: 'POST', headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({concept, language: this.conceptLanguage, difficulty: this.conceptDifficulty})
+                });
+                if (res.status === 402) {
+                    const data = await res.json();
+                    this.conceptGenerating = false;
+                    this.handleInsufficientTokens(data.required, data.balance);
+                    return;
+                }
+                if (res.status === 401) {
+                    this.conceptGenerating = false;
+                    this.showAuthModal = true;
+                    return;
+                }
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                while (true) {
+                    const {done, value} = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, {stream:true});
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+                    let eventType = null;
+                    for (const line of lines) {
+                        if (line.startsWith('event: ')) eventType = line.slice(7);
+                        else if (line.startsWith('data: ')) {
+                            const payload = JSON.parse(line.slice(6));
+                            if (eventType === 'repo_ready') {
+                                const meta = JSON.parse(payload);
+                                this.repoId = meta.repo_id;
+                                this.repoData = {name: meta.name, file_count: meta.file_count, languages: {}};
+                                this.repoReady = true;
+                                this.showConceptLab = false;
+                                this.loadFiles();
+                                this.conceptStatus = 'Done!';
+                            } else if (eventType === 'error') {
+                                this.conceptStatus = 'Error: ' + payload;
+                            }
+                        }
+                    }
+                }
+            } catch(e) {
+                this.conceptStatus = 'Failed: ' + e.message;
+            }
+            this.conceptGenerating = false;
+            this.refreshTokens();
+        },
+
+        // ── Social Sharing ──
+        async shareTwitter() {
+            const repo = this.repoData.name || 'a repo';
+            const text = `Just used @RepoLM to understand ${repo} in minutes. The AI podcast feature is 🔥`;
+            // First create a share link
+            try {
+                const res = await fetch('/api/share', {
+                    method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({content: this.viewingContent, kind: this.viewingGenerated?.kind || 'overview', repo_name: repo})
+                });
+                const data = await res.json();
+                const url = data.url ? window.location.origin + data.url : window.location.href;
+                window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, '_blank');
+                fetch('/api/share/track', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({content_id: data.share_id || '', platform:'twitter'})});
+            } catch(e) {
+                window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(window.location.href)}`, '_blank');
+            }
+        },
+
+        async shareLinkedIn() {
+            try {
+                const res = await fetch('/api/share', {
+                    method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({content: this.viewingContent, kind: this.viewingGenerated?.kind || 'overview', repo_name: this.repoData.name || 'repo'})
+                });
+                const data = await res.json();
+                const url = data.url ? window.location.origin + data.url : window.location.href;
+                window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`, '_blank');
+                fetch('/api/share/track', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({content_id: data.share_id || '', platform:'linkedin'})});
+            } catch(e) {
+                window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(window.location.href)}`, '_blank');
+            }
+        },
+
+        showAchievement(data) {
+            this.achievementPopup = data;
+            setTimeout(() => { this.achievementPopup = null; }, 5000);
+        },
+
+        async loadAchievements() {
+            if (!this.user) return;
+            try {
+                const res = await fetch('/api/my/achievements');
+                const data = await res.json();
+                this.achievements = data.achievements || [];
+            } catch(e) {}
+        },
+
+        updateStreak() {
+            // Track repos analyzed this week in localStorage
+            const key = 'repolm_weekly_repos';
+            const now = Date.now();
+            const weekAgo = now - 7 * 86400000;
+            let entries = JSON.parse(localStorage.getItem(key) || '[]');
+            entries = entries.filter(t => t > weekAgo);
+            this.streakCount = entries.length;
+        },
+
+        trackRepoAnalysis() {
+            const key = 'repolm_weekly_repos';
+            let entries = JSON.parse(localStorage.getItem(key) || '[]');
+            entries.push(Date.now());
+            // Keep last 30 entries
+            if (entries.length > 30) entries = entries.slice(-30);
+            localStorage.setItem(key, JSON.stringify(entries));
+            this.updateStreak();
+        },
+
+        // ── First Free Repo (anonymous users) ──
+        canGetFreeOverview() {
+            if (this.user) return false;
+            return !(localStorage.getItem('repolm_free_used') === '1');
+        },
+
+        markFreeUsed() {
+            localStorage.setItem('repolm_free_used', '1');
+            this.showFirstFreeBanner = true;
+        },
+
+        // ── Syntax highlighting for slides ──
+        highlightSlides() {
+            this.$nextTick(() => {
+                document.querySelectorAll('.slide-animate pre code, .slide-content pre code').forEach(el => {
+                    if (!el.dataset.highlighted) { hljs.highlightElement(el); el.dataset.highlighted = 'true'; }
+                });
+            });
+        }
+    }
+}
+</script>
+</body>
+</html>

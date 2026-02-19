@@ -3,7 +3,13 @@ __pycache__/
 *.db
 *.db-shm
 *.db-wal
-output/
-src/output/
+output/*.txt
+output/*.md
+output/*.mp3
+output/audio_*/
+src/output/*.txt
+src/output/*.md
+src/output/*.mp3
+src/output/audio_*/
 /tmp/
 .env

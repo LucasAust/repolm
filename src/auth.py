@@ -19,6 +19,16 @@ router = APIRouter()
 SESSION_COOKIE = "repolm_session"
 
 
+def _cookie_kwargs(request: Request = None) -> dict:
+    """Return cookie settings, secure=True when behind HTTPS."""
+    secure = False
+    if request:
+        forwarded = request.headers.get("x-forwarded-proto", "")
+        if forwarded == "https" or request.url.scheme == "https":
+            secure = True
+    return {"max_age": 30 * 86400, "httponly": True, "samesite": "lax", "secure": secure}
+
+
 def _hash_password(password: str, salt: str = None) -> tuple:
     """Hash password with PBKDF2. Returns (hash, salt)."""
     if salt is None:
@@ -70,22 +80,43 @@ async def signup(request: Request):
 
     pw_hash, salt = _hash_password(password)
 
+    # Check for referral code
+    ref_code = body.get("referral_code", "").strip()
+    referrer = database.get_user_by_referral(ref_code) if ref_code else None
+
+    signup_tokens = 10
+    if referrer:
+        signup_tokens = 15  # Extra 5 for referred users
+
     with database.db() as conn:
         cur = conn.execute(
             "INSERT INTO users (username, email, password_hash, password_salt) VALUES (?,?,?,?)",
             (username, email, pw_hash, salt)
         )
         user_id = cur.lastrowid
-        # Give 10 free tokens
-        conn.execute("UPDATE users SET tokens = 10 WHERE id=?", (user_id,))
+        conn.execute("UPDATE users SET tokens = ? WHERE id=?", (signup_tokens, user_id))
         conn.execute(
             "INSERT INTO token_transactions (user_id, amount, action, description) VALUES (?,?,?,?)",
-            (user_id, 10, "bonus", "Welcome bonus")
+            (user_id, signup_tokens, "bonus", "Welcome bonus" + (" (referral)" if referrer else ""))
         )
+
+    # Handle referral rewards
+    if referrer:
+        database.set_referred_by(user_id, referrer["id"])
+        database.add_tokens(referrer["id"], 5, f"Referral reward: {username} signed up")
+
+    # Send welcome email (async, fire-and-forget)
+    try:
+        from email_service import send_welcome
+        if email:
+            import threading
+            threading.Thread(target=send_welcome, args=(email, username), daemon=True).start()
+    except Exception:
+        pass
 
     session_token = create_session(user_id)
     response = JSONResponse({"ok": True, "username": username})
-    response.set_cookie(SESSION_COOKIE, session_token, max_age=30*86400, httponly=True, samesite="lax")
+    response.set_cookie(SESSION_COOKIE, session_token, **_cookie_kwargs(request))
     return response
 
 
@@ -112,7 +143,7 @@ async def login(request: Request):
 
     session_token = create_session(row["id"])
     response = JSONResponse({"ok": True, "username": row["username"]})
-    response.set_cookie(SESSION_COOKIE, session_token, max_age=30*86400, httponly=True, samesite="lax")
+    response.set_cookie(SESSION_COOKIE, session_token, **_cookie_kwargs(request))
     return response
 
 

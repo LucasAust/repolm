@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Learn — RepoLM</title>
+<meta name="theme-color" content="#09090b">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="apple-touch-icon" href="/static/favicon.svg">
+<meta name="description" content="Curated learning paths — master programming concepts through real GitHub repos.">
+<script src="https://cdn.tailwindcss.com"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<style>
+body{background:#09090b;color:#e5e7eb;font-family:system-ui,-apple-system,sans-serif}
+.glow{box-shadow:0 0 60px rgba(139,92,246,0.15)}
+.card-hover{transition:all 0.2s}
+.card-hover:hover{transform:translateY(-2px);border-color:#6d28d9}
+.gradient-text{background:linear-gradient(135deg,#a78bfa,#c084fc,#e879f9);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.diff-beginner{color:#34d399;border-color:rgba(52,211,153,0.3)}
+.diff-intermediate{color:#fbbf24;border-color:rgba(251,191,36,0.3)}
+.diff-advanced{color:#f87171;border-color:rgba(248,113,113,0.3)}
+</style>
+</head>
+<body>
+<div x-data="learnApp()" x-init="init()">
+<!-- Nav -->
+<nav class="max-w-6xl mx-auto px-6 py-5 flex items-center justify-between">
+    <a href="/" class="text-xl font-bold"><span class="text-purple-400">Repo</span>LM</a>
+    <div class="flex items-center gap-4">
+        <a href="/learn" class="text-sm text-purple-400">Learn</a>
+        <a href="/app" class="text-sm text-gray-400 hover:text-purple-300 transition">Open App →</a>
+    </div>
+</nav>
+
+<!-- Header -->
+<section class="max-w-5xl mx-auto px-6 pt-12 pb-8 text-center">
+    <div class="inline-block px-3 py-1 rounded-full bg-purple-900/30 border border-purple-800/50 text-purple-300 text-xs mb-4">📚 Free learning content</div>
+    <h1 class="text-4xl md:text-5xl font-bold mb-4">
+        Learning <span class="gradient-text">Paths</span>
+    </h1>
+    <p class="text-lg text-gray-400 max-w-2xl mx-auto">
+        Master programming concepts through real GitHub repos. Each path guides you through curated codebases that teach by example.
+    </p>
+</section>
+
+<!-- Path list -->
+<section x-show="!selectedPath" class="max-w-5xl mx-auto px-6 py-8">
+    <div class="grid md:grid-cols-2 gap-4">
+        <template x-for="path in paths" :key="path.id">
+            <button @click="selectPath(path.id)" class="w-full text-left bg-gray-900/50 border border-gray-800 rounded-2xl p-6 card-hover">
+                <div class="flex items-start gap-3">
+                    <div class="text-3xl" x-text="path.icon"></div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2 mb-1">
+                            <h3 class="text-lg font-semibold text-white" x-text="path.title"></h3>
+                            <span class="text-[10px] px-2 py-0.5 rounded-full border"
+                                :class="'diff-' + path.difficulty"
+                                x-text="path.difficulty"></span>
+                        </div>
+                        <p class="text-sm text-gray-400 mb-3" x-text="path.description"></p>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <template x-for="tag in path.tags.slice(0,4)" :key="tag">
+                                <span class="text-[10px] bg-gray-800 text-gray-400 px-2 py-0.5 rounded" x-text="tag"></span>
+                            </template>
+                            <span class="text-[10px] text-gray-500" x-text="path.repo_count + ' repos'"></span>
+                        </div>
+                    </div>
+                </div>
+            </button>
+        </template>
+    </div>
+</section>
+
+<!-- Selected path detail -->
+<section x-show="selectedPath" x-cloak class="max-w-4xl mx-auto px-6 py-8">
+    <button @click="selectedPath=null" class="text-sm text-gray-400 hover:text-purple-400 mb-6 flex items-center gap-1">← Back to all paths</button>
+    <div class="mb-8">
+        <div class="flex items-center gap-3 mb-2">
+            <span class="text-3xl" x-text="selectedPath?.icon"></span>
+            <h2 class="text-3xl font-bold text-white" x-text="selectedPath?.title"></h2>
+            <span class="text-xs px-2 py-0.5 rounded-full border"
+                :class="'diff-' + (selectedPath?.difficulty || '')"
+                x-text="selectedPath?.difficulty"></span>
+        </div>
+        <p class="text-gray-400" x-text="selectedPath?.description"></p>
+    </div>
+    <div class="space-y-4">
+        <template x-for="(repo, i) in (selectedPath?.repos || [])" :key="i">
+            <div class="bg-gray-900/50 border border-gray-800 rounded-xl p-5 card-hover">
+                <div class="flex items-start justify-between gap-4">
+                    <div class="flex-1">
+                        <h3 class="text-lg font-semibold text-white mb-1" x-text="repo.name"></h3>
+                        <p class="text-sm text-gray-400 mb-3" x-text="repo.teaches"></p>
+                        <p class="text-xs text-gray-600 font-mono" x-text="repo.url.replace('https://github.com/', '')"></p>
+                    </div>
+                    <a :href="'/app?url=' + encodeURIComponent(repo.url)"
+                        class="shrink-0 bg-purple-600 hover:bg-purple-500 text-white text-sm px-4 py-2 rounded-lg transition">
+                        Learn →
+                    </a>
+                </div>
+            </div>
+        </template>
+    </div>
+</section>
+
+<footer class="max-w-6xl mx-auto px-6 py-10 border-t border-gray-800 text-center text-gray-600 text-sm">
+    <span class="text-purple-400 font-semibold">Repo</span>LM — Powered by Gemini
+</footer>
+</div>
+
+<script>
+function learnApp() {
+    return {
+        paths: [],
+        selectedPath: null,
+        async init() {
+            try {
+                const res = await fetch('/api/learning-paths');
+                this.paths = await res.json();
+            } catch(e) {}
+        },
+        async selectPath(id) {
+            try {
+                const res = await fetch(`/api/learning-paths/${id}`);
+                this.selectedPath = await res.json();
+            } catch(e) {}
+        }
+    }
+}
+</script>
+</body>
+</html>

@@ -98,17 +98,18 @@ short code example
 """
 
 
-def call_llm(prompt: str, content: str, model: str = "gemini-2.5-pro") -> str:
-    """Call LLM via OpenAI-compatible API. Supports Gemini via Google's endpoint."""
+def _get_client():
+    """Get OpenAI-compatible client configured for Gemini or OpenAI."""
     api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("OPENAI_API_KEY")
-    base_url = None
-
     if os.environ.get("GEMINI_API_KEY"):
         base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
-        client = openai.OpenAI(api_key=api_key, base_url=base_url)
-    else:
-        client = openai.OpenAI(api_key=api_key)
+        return openai.OpenAI(api_key=api_key, base_url=base_url)
+    return openai.OpenAI(api_key=api_key)
 
+
+def call_llm(prompt: str, content: str, model: str = "gemini-2.5-pro") -> str:
+    """Call LLM via OpenAI-compatible API. Supports Gemini via Google's endpoint."""
+    client = _get_client()
     response = client.chat.completions.create(
         model=model,
         messages=[
@@ -119,6 +120,39 @@ def call_llm(prompt: str, content: str, model: str = "gemini-2.5-pro") -> str:
         temperature=0.7,
     )
     return response.choices[0].message.content
+
+
+def call_llm_stream(prompt: str, content: str, model: str = "gemini-2.5-pro"):
+    """Stream LLM response, yielding text chunks."""
+    client = _get_client()
+    stream = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": content},
+        ],
+        max_tokens=8192,
+        temperature=0.7,
+        stream=True,
+    )
+    for chunk in stream:
+        if chunk.choices and chunk.choices[0].delta.content:
+            yield chunk.choices[0].delta.content
+
+
+def call_llm_stream_messages(messages: list, model: str = "gemini-2.5-pro"):
+    """Stream LLM response with a full messages array, yielding text chunks."""
+    client = _get_client()
+    stream = client.chat.completions.create(
+        model=model,
+        messages=messages,
+        max_tokens=8192,
+        temperature=0.7,
+        stream=True,
+    )
+    for chunk in stream:
+        if chunk.choices and chunk.choices[0].delta.content:
+            yield chunk.choices[0].delta.content
 
 
 def generate_overview(repo_text: str, model: str = "gemini-2.5-pro") -> str:

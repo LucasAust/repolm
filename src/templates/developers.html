@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>API Docs — RepoLM</title>
+<meta name="theme-color" content="#09090b">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="apple-touch-icon" href="/static/favicon.svg">
+<meta name="description" content="RepoLM API — programmatically ingest repos, generate overviews, podcasts, and slides.">
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+body{background:#09090b;color:#e5e7eb;font-family:system-ui,-apple-system,sans-serif}
+.code-block{background:#0d1117;border:1px solid #1f2937;border-radius:8px;padding:16px;font-size:13px;overflow-x:auto;font-family:'SF Mono',Consolas,monospace}
+.endpoint{border-left:3px solid #8b5cf6;padding-left:16px;margin-bottom:24px}
+.method{display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:700;margin-right:8px}
+.method-post{background:rgba(52,211,153,0.2);color:#34d399}
+.method-get{background:rgba(96,165,250,0.2);color:#60a5fa}
+</style>
+</head>
+<body>
+<div class="max-w-4xl mx-auto px-6 py-12">
+    <nav class="flex items-center justify-between mb-12">
+        <a href="/" class="text-xl font-bold"><span class="text-purple-400">Repo</span>LM</a>
+        <div class="flex items-center gap-4">
+            <a href="/app" class="text-sm text-gray-400 hover:text-purple-300">App</a>
+            <a href="/learn" class="text-sm text-gray-400 hover:text-purple-300">Learn</a>
+        </div>
+    </nav>
+
+    <h1 class="text-4xl font-bold mb-4">API <span class="text-purple-400">Documentation</span></h1>
+    <p class="text-lg text-gray-400 mb-8">Programmatically ingest repos and generate educational content.</p>
+
+    <div class="bg-gray-900/50 border border-gray-800 rounded-xl p-6 mb-8">
+        <h2 class="text-lg font-semibold mb-2">Authentication</h2>
+        <p class="text-gray-400 text-sm mb-3">All API requests require an API key sent via the <code class="bg-gray-800 px-1 rounded">X-API-Key</code> header.</p>
+        <div class="code-block">
+            <span class="text-gray-500">curl</span> -H <span class="text-green-400">"X-API-Key: rplm_your_key_here"</span> \<br>
+            &nbsp;&nbsp;https://repolm.com/api/v1/repos
+        </div>
+        <p class="text-xs text-gray-500 mt-3">Generate your API key in <a href="/app" class="text-purple-400">Settings</a>. Rate limits depend on your plan.</p>
+    </div>
+
+    <div class="bg-gray-900/50 border border-gray-800 rounded-xl p-6 mb-8">
+        <h2 class="text-lg font-semibold mb-2">Rate Limits</h2>
+        <table class="w-full text-sm">
+            <thead><tr class="text-gray-500 text-left"><th class="pb-2">Plan</th><th class="pb-2">Calls/Day</th><th class="pb-2">Price</th></tr></thead>
+            <tbody class="text-gray-300">
+                <tr><td class="py-1">Free</td><td>10</td><td>$0</td></tr>
+                <tr><td class="py-1">Pro</td><td>100</td><td>$19/mo</td></tr>
+                <tr><td class="py-1">Team</td><td>1,000</td><td>$49/mo</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <h2 class="text-2xl font-bold mb-6">Endpoints</h2>
+
+    <div class="endpoint">
+        <h3 class="text-lg font-semibold mb-2"><span class="method method-post">POST</span>/api/v1/repos</h3>
+        <p class="text-sm text-gray-400 mb-3">Ingest a GitHub/GitLab repository. Costs 5 tokens.</p>
+        <div class="code-block mb-3">
+{<br>
+&nbsp;&nbsp;<span class="text-purple-300">"url"</span>: <span class="text-green-400">"https://github.com/user/repo"</span><br>
+}
+        </div>
+        <p class="text-xs text-gray-500">Response: <code>{"repo_id": "abc12345", "token_cost": 5}</code></p>
+    </div>
+
+    <div class="endpoint">
+        <h3 class="text-lg font-semibold mb-2"><span class="method method-get">GET</span>/api/v1/repos/{repo_id}</h3>
+        <p class="text-sm text-gray-400 mb-3">Get repo ingestion status and metadata.</p>
+        <p class="text-xs text-gray-500">Response: <code>{"status": "ready", "data": {...}, "file_count": 42}</code></p>
+    </div>
+
+    <div class="endpoint">
+        <h3 class="text-lg font-semibold mb-2"><span class="method method-post">POST</span>/api/v1/repos/{repo_id}/generate</h3>
+        <p class="text-sm text-gray-400 mb-3">Generate content from an ingested repo.</p>
+        <div class="code-block mb-3">
+{<br>
+&nbsp;&nbsp;<span class="text-purple-300">"kind"</span>: <span class="text-green-400">"overview"</span>,  <span class="text-gray-600">// overview | podcast | slides</span><br>
+&nbsp;&nbsp;<span class="text-purple-300">"depth"</span>: <span class="text-green-400">"high-level"</span>,  <span class="text-gray-600">// high-level | low-level</span><br>
+&nbsp;&nbsp;<span class="text-purple-300">"expertise"</span>: <span class="text-green-400">"amateur"</span>  <span class="text-gray-600">// beginner | amateur | expert</span><br>
+}
+        </div>
+        <p class="text-xs text-gray-500">Response: <code>{"job_id": "xyz789", "token_cost": 10}</code></p>
+    </div>
+
+    <div class="endpoint">
+        <h3 class="text-lg font-semibold mb-2"><span class="method method-get">GET</span>/api/v1/jobs/{job_id}</h3>
+        <p class="text-sm text-gray-400 mb-3">Poll job status. When <code>status: "done"</code>, the <code>result</code> field contains the generated content.</p>
+    </div>
+
+    <div class="endpoint">
+        <h3 class="text-lg font-semibold mb-2"><span class="method method-get">GET</span>/api/v1/usage</h3>
+        <p class="text-sm text-gray-400 mb-3">Get your API usage statistics.</p>
+    </div>
+
+    <h2 class="text-2xl font-bold mb-4 mt-12">Quick Start</h2>
+    <div class="code-block">
+<span class="text-gray-500"># 1. Ingest a repo</span><br>
+curl -X POST https://repolm.com/api/v1/repos \<br>
+&nbsp;&nbsp;-H "X-API-Key: $API_KEY" \<br>
+&nbsp;&nbsp;-H "Content-Type: application/json" \<br>
+&nbsp;&nbsp;-d '{"url": "https://github.com/expressjs/express"}'<br>
+<br>
+<span class="text-gray-500"># 2. Poll until ready</span><br>
+curl https://repolm.com/api/v1/repos/abc123 \<br>
+&nbsp;&nbsp;-H "X-API-Key: $API_KEY"<br>
+<br>
+<span class="text-gray-500"># 3. Generate an overview</span><br>
+curl -X POST https://repolm.com/api/v1/repos/abc123/generate \<br>
+&nbsp;&nbsp;-H "X-API-Key: $API_KEY" \<br>
+&nbsp;&nbsp;-H "Content-Type: application/json" \<br>
+&nbsp;&nbsp;-d '{"kind": "overview", "expertise": "beginner"}'<br>
+<br>
+<span class="text-gray-500"># 4. Get the result</span><br>
+curl https://repolm.com/api/v1/jobs/xyz789 \<br>
+&nbsp;&nbsp;-H "X-API-Key: $API_KEY"
+    </div>
+
+    <footer class="mt-16 pt-8 border-t border-gray-800 text-center text-gray-600 text-sm">
+        <span class="text-purple-400 font-semibold">Repo</span>LM API — <a href="/app" class="text-purple-400">Get your API key →</a>
+    </footer>
+</div>
+</body>
+</html>

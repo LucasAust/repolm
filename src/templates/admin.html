@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Dashboard — RepoLM</title>
+<meta name="theme-color" content="#09090b">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="apple-touch-icon" href="/static/favicon.svg">
+<script src="https://cdn.tailwindcss.com"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>body{background:#09090b;color:#e5e7eb;font-family:system-ui,sans-serif}</style>
+</head>
+<body>
+<div x-data="adminDash()" x-init="load()" class="min-h-screen">
+    <nav class="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between border-b border-gray-800">
+        <div class="flex items-center gap-4">
+            <a href="/" class="text-xl font-bold"><span class="text-purple-400">Repo</span>LM</a>
+            <span class="text-sm text-gray-500">Admin Dashboard</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <input x-model="apiKey" type="password" placeholder="Admin API Key" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white w-48">
+            <button @click="load()" class="bg-purple-600 hover:bg-purple-500 text-white text-sm px-4 py-1.5 rounded-lg">Load</button>
+        </div>
+    </nav>
+
+    <div x-show="error" class="max-w-7xl mx-auto px-6 mt-4">
+        <div class="bg-red-900/30 border border-red-700 rounded-lg px-4 py-3 text-red-300 text-sm" x-text="error"></div>
+    </div>
+
+    <div x-show="loaded" class="max-w-7xl mx-auto px-6 py-8">
+        <!-- KPI cards -->
+        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-8">
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div class="text-xs text-gray-500 mb-1">Active (24h)</div>
+                <div class="text-2xl font-bold text-purple-400" x-text="stats.active_users_24h"></div>
+            </div>
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div class="text-xs text-gray-500 mb-1">Signups Today</div>
+                <div class="text-2xl font-bold text-green-400" x-text="stats.signups?.today"></div>
+            </div>
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div class="text-xs text-gray-500 mb-1">Signups (Week)</div>
+                <div class="text-2xl font-bold text-green-400" x-text="stats.signups?.week"></div>
+            </div>
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div class="text-xs text-gray-500 mb-1">Total Users</div>
+                <div class="text-2xl font-bold text-white" x-text="stats.total_users"></div>
+            </div>
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div class="text-xs text-gray-500 mb-1">Paid Users</div>
+                <div class="text-2xl font-bold text-yellow-400" x-text="stats.paid_users"></div>
+            </div>
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div class="text-xs text-gray-500 mb-1">Active Subs</div>
+                <div class="text-2xl font-bold text-yellow-400" x-text="stats.active_subscriptions"></div>
+            </div>
+        </div>
+
+        <!-- Second row -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div class="text-xs text-gray-500 mb-1">Tokens Purchased</div>
+                <div class="text-2xl font-bold text-yellow-400" x-text="stats.total_tokens_purchased"></div>
+            </div>
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div class="text-xs text-gray-500 mb-1">Total Generated</div>
+                <div class="text-2xl font-bold text-purple-400" x-text="stats.total_generated"></div>
+            </div>
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div class="text-xs text-gray-500 mb-1">Total Chats</div>
+                <div class="text-2xl font-bold text-blue-400" x-text="stats.total_chats"></div>
+            </div>
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div class="text-xs text-gray-500 mb-1">Public Pages</div>
+                <div class="text-2xl font-bold text-green-400" x-text="stats.public_pages"></div>
+            </div>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-6 mb-8">
+            <!-- Generation by type chart -->
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-6">
+                <h3 class="text-sm font-semibold mb-4">Generation by Type</h3>
+                <canvas id="genChart" height="200"></canvas>
+            </div>
+
+            <!-- Analytics events chart -->
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-6">
+                <h3 class="text-sm font-semibold mb-4">Daily Events (7 days)</h3>
+                <canvas id="dailyChart" height="200"></canvas>
+            </div>
+        </div>
+
+        <!-- Top repos & conversion funnel -->
+        <div class="grid md:grid-cols-2 gap-6 mb-8">
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-6">
+                <h3 class="text-sm font-semibold mb-4">Top Repos</h3>
+                <div class="space-y-2">
+                    <template x-for="r in stats.top_repos || []" :key="r.url">
+                        <div class="flex items-center justify-between text-sm">
+                            <span class="text-gray-300 truncate" x-text="r.name"></span>
+                            <span class="text-purple-400 font-mono" x-text="r.count"></span>
+                        </div>
+                    </template>
+                    <p x-show="!stats.top_repos?.length" class="text-gray-500 text-sm">No data yet</p>
+                </div>
+            </div>
+
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-6">
+                <h3 class="text-sm font-semibold mb-4">Conversion Funnel</h3>
+                <canvas id="funnelChart" height="200"></canvas>
+            </div>
+        </div>
+
+        <!-- System health -->
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-6 mb-8">
+            <h3 class="text-sm font-semibold mb-4">System Health</h3>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm" x-show="health">
+                <div>
+                    <div class="text-gray-500">Status</div>
+                    <div :class="health.status==='ok' ? 'text-green-400' : 'text-yellow-400'" x-text="health.status" class="font-bold"></div>
+                </div>
+                <div>
+                    <div class="text-gray-500">Uptime</div>
+                    <div class="text-white" x-text="Math.round((health.uptime || 0) / 3600) + 'h'"></div>
+                </div>
+                <div>
+                    <div class="text-gray-500">Pressure</div>
+                    <div :class="{'text-green-400': health.pressure==='low', 'text-yellow-400': health.pressure==='medium', 'text-red-400': health.pressure==='high'}" x-text="health.pressure"></div>
+                </div>
+                <div>
+                    <div class="text-gray-500">Circuit Breaker</div>
+                    <div :class="health.circuit_breaker?.circuit_open ? 'text-red-400' : 'text-green-400'" x-text="health.circuit_breaker?.circuit_open ? 'OPEN' : 'Closed'"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function adminDash() {
+    return {
+        apiKey: localStorage.getItem('repolm_admin_key') || '',
+        stats: {},
+        analytics: {},
+        health: {},
+        loaded: false,
+        error: '',
+
+        async load() {
+            this.error = '';
+            if (this.apiKey) localStorage.setItem('repolm_admin_key', this.apiKey);
+            const headers = {'x-api-key': this.apiKey};
+            try {
+                const [statsRes, analyticsRes, healthRes] = await Promise.all([
+                    fetch('/api/admin/stats', {headers}),
+                    fetch('/api/admin/analytics?days=7', {headers}),
+                    fetch('/health'),
+                ]);
+                if (!statsRes.ok) { this.error = 'Unauthorized or error loading stats'; return; }
+                this.stats = await statsRes.json();
+                this.analytics = await analyticsRes.json();
+                this.health = await healthRes.json();
+                this.loaded = true;
+                this.$nextTick(() => this.drawCharts());
+            } catch(e) { this.error = 'Failed to load: ' + e.message; }
+        },
+
+        drawCharts() {
+            // Generation by type
+            const genData = this.stats.generation_by_type || [];
+            if (genData.length && document.getElementById('genChart')) {
+                new Chart(document.getElementById('genChart'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: genData.map(d => d.kind),
+                        datasets: [{data: genData.map(d => d.count), backgroundColor: ['#7c3aed','#ec4899','#06b6d4','#f59e0b','#10b981']}]
+                    },
+                    options: {plugins: {legend: {labels: {color: '#9ca3af'}}}, responsive: true}
+                });
+            }
+
+            // Daily events
+            const daily = this.analytics.daily_trend || [];
+            if (daily.length && document.getElementById('dailyChart')) {
+                new Chart(document.getElementById('dailyChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: daily.map(d => d.date),
+                        datasets: [{label: 'Events', data: daily.map(d => d.events), backgroundColor: '#7c3aed'}]
+                    },
+                    options: {scales: {y: {ticks: {color:'#6b7280'}}, x: {ticks: {color:'#6b7280'}}}, plugins: {legend: {display:false}}, responsive: true}
+                });
+            }
+
+            // Funnel
+            const funnel = this.analytics.funnel || {};
+            if (document.getElementById('funnelChart')) {
+                new Chart(document.getElementById('funnelChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: ['Signups', 'First Generate', 'First Purchase'],
+                        datasets: [{data: [funnel.signups||0, funnel.first_generate||0, funnel.first_purchase||0], backgroundColor: ['#7c3aed','#ec4899','#f59e0b']}]
+                    },
+                    options: {indexAxis: 'y', scales: {x: {ticks: {color:'#6b7280'}}, y: {ticks: {color:'#9ca3af'}}}, plugins: {legend: {display:false}}, responsive: true}
+                });
+            }
+        }
+    }
+}
+</script>
+</body>
+</html>
