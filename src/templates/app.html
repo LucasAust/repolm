@@ -438,7 +438,7 @@
 </template>
 
 <!-- Main 3-panel layout -->
-<template x-if="repoReady || exampleLoaded">
+<template x-if="repoReady ">
     <div class="flex-1 flex overflow-hidden main-layout relative">
 
         <!-- Mobile overlay -->
@@ -505,11 +505,11 @@
                     <div class="flex gap-2">
                         <input x-model="chatInput" type="text" placeholder="Ask about this codebase..."
                             @keydown.enter="sendChat()"
-                            :disabled="chatLoading || exampleLoaded"
+                            :disabled="chatLoading "
                             class="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 disabled:opacity-50">
-                        <button @click="sendChat()" :disabled="chatLoading || exampleLoaded" class="bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 px-4 py-2.5 rounded-lg text-sm">Send (2 🪙)</button>
+                        <button @click="sendChat()" :disabled="chatLoading " class="bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 px-4 py-2.5 rounded-lg text-sm">Send (2 🪙)</button>
                     </div>
-                    <p x-show="exampleLoaded" class="text-xs text-gray-500 mt-2">Chat disabled in example mode. <a href="/app" class="text-purple-400 hover:underline">Load your own repo</a> to chat.</p>
+<!-- chat always enabled -->
                 </div>
             </div>
 
@@ -677,17 +677,17 @@
         <div class="w-72 border-l border-gray-800 flex flex-col shrink-0 bg-gray-950 desktop-only">
             <div class="h-[41px] flex items-center px-3 border-b border-gray-800 text-xs text-gray-500 font-medium uppercase tracking-wider">Generate</div>
             <div class="p-3 space-y-2">
-                <button @click="doGenerate('overview')" :disabled="generating || exampleLoaded"
+                <button @click="doGenerate('overview')" :disabled="generating "
                     class="w-full text-left bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg p-3 transition disabled:opacity-50">
                     <div class="flex items-center gap-2 text-sm font-medium">📖 Overview <span class="text-yellow-400 text-xs">(10 🪙)</span></div>
                     <p class="text-xs text-gray-500 mt-1">Architecture, concepts, how it works</p>
                 </button>
-                <button @click="doGenerate('podcast')" :disabled="generating || exampleLoaded"
+                <button @click="doGenerate('podcast')" :disabled="generating "
                     class="w-full text-left bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg p-3 transition disabled:opacity-50">
                     <div class="flex items-center gap-2 text-sm font-medium">🎙️ Podcast Script <span class="text-yellow-400 text-xs">(20 🪙)</span></div>
                     <p class="text-xs text-gray-500 mt-1">Two-host conversation about the codebase</p>
                 </button>
-                <button @click="doGenerate('slides')" :disabled="generating || exampleLoaded"
+                <button @click="doGenerate('slides')" :disabled="generating "
                     class="w-full text-left bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg p-3 transition disabled:opacity-50">
                     <div class="flex items-center gap-2 text-sm font-medium">📊 Slide Deck <span class="text-yellow-400 text-xs">(15 🪙)</span></div>
                     <p class="text-xs text-gray-500 mt-1">Presentation-ready breakdown</p>
@@ -744,15 +744,15 @@
                 <button @click="mobileDrawer=null" class="text-gray-500 hover:text-white text-sm">✕</button>
             </div>
             <div class="p-3 space-y-2">
-                <button @click="doGenerate('overview');mobileDrawer=null" :disabled="generating || exampleLoaded"
+                <button @click="doGenerate('overview');mobileDrawer=null" :disabled="generating "
                     class="w-full text-left bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg p-3 transition disabled:opacity-50">
                     <div class="flex items-center gap-2 text-sm font-medium">📖 Overview</div>
                 </button>
-                <button @click="doGenerate('podcast');mobileDrawer=null" :disabled="generating || exampleLoaded"
+                <button @click="doGenerate('podcast');mobileDrawer=null" :disabled="generating "
                     class="w-full text-left bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg p-3 transition disabled:opacity-50">
                     <div class="flex items-center gap-2 text-sm font-medium">🎙️ Podcast</div>
                 </button>
-                <button @click="doGenerate('slides');mobileDrawer=null" :disabled="generating || exampleLoaded"
+                <button @click="doGenerate('slides');mobileDrawer=null" :disabled="generating "
                     class="w-full text-left bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg p-3 transition disabled:opacity-50">
                     <div class="flex items-center gap-2 text-sm font-medium">📊 Slides</div>
                 </button>
@@ -1094,13 +1094,59 @@ function repolm() {
                 const res = await fetch(`/api/examples/${slug}`);
                 if (!res.ok) return;
                 const data = await res.json();
-                this.exampleLoaded = true;
                 this.exampleData = data;
-                this.repoData = { name: data.name, file_count: 0, languages: {} };
-                this.files = [];
-                // Load pre-generated content
-                if (data.overview) this.generated.push({kind:'overview', depth:data.depth||'high-level', expertise:data.expertise||'amateur', content:data.overview});
-                if (data.podcast) this.generated.push({kind:'podcast', depth:data.depth||'high-level', expertise:data.expertise||'amateur', content:data.podcast});
+
+                // Pre-load generated content
+                const preGenerated = [];
+                if (data.overview) preGenerated.push({kind:'overview', depth:data.depth||'high-level', expertise:data.expertise||'amateur', content:data.overview});
+                if (data.podcast) preGenerated.push({kind:'podcast', depth:data.depth||'high-level', expertise:data.expertise||'amateur', content:data.podcast});
+                if (data.slides) preGenerated.push({kind:'slides', depth:data.depth||'high-level', expertise:data.expertise||'amateur', content:data.slides});
+
+                // Actually ingest the repo so we get files and chat
+                if (data.repo) {
+                    const url = 'https://github.com/' + data.repo;
+                    this.urlInput = url;
+                    this.loadingRepo = true;
+                    this.repoMessage = 'Loading ' + data.name + '...';
+                    const repoRes = await fetch('/api/repo', {
+                        method: 'POST',
+                        headers: {'Content-Type':'application/json'},
+                        body: JSON.stringify({url})
+                    });
+                    const repoData = await repoRes.json();
+                    if (repoData.repo_id) {
+                        this.repoId = repoData.repo_id;
+                        // Poll until ready
+                        await new Promise((resolve) => {
+                            const iv = setInterval(async () => {
+                                const r = await fetch(`/api/repo/${this.repoId}`);
+                                const d = await r.json();
+                                this.repoMessage = d.message;
+                                this.repoData = d.data || {};
+                                if (d.status === 'ready') {
+                                    clearInterval(iv);
+                                    this.repoReady = true;
+                                    this.loadingRepo = false;
+                                    this.loadFiles();
+                                    resolve();
+                                } else if (d.status === 'error') {
+                                    clearInterval(iv);
+                                    this.loadingRepo = false;
+                                    // Fall back to example-only mode
+                                    this.exampleLoaded = true;
+                                    this.repoData = { name: data.name, file_count: 0, languages: {} };
+                                    resolve();
+                                }
+                            }, 1500);
+                        });
+                    }
+                } else {
+                    this.exampleLoaded = true;
+                    this.repoData = { name: data.name, file_count: 0, languages: {} };
+                }
+
+                // Add pre-generated content
+                this.generated = preGenerated;
                 if (this.generated.length) this.viewGenerated(this.generated[0]);
             } catch(e) { console.error(e); }
         },
