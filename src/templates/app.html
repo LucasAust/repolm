@@ -446,7 +446,7 @@
 
         <!-- LEFT: File tree (desktop: static, mobile: drawer) -->
         <div class="w-64 border-r border-gray-800 flex flex-col shrink-0 bg-gray-950 desktop-only">
-            <div class="px-3 py-2 border-b border-gray-800 text-xs text-gray-500 font-medium uppercase tracking-wider">Files</div>
+            <div class="h-[41px] flex items-center px-3 border-b border-gray-800 text-xs text-gray-500 font-medium uppercase tracking-wider">Files</div>
             <div class="flex-1 overflow-y-auto file-tree p-2">
                 <!-- Loading skeleton -->
                 <template x-if="loadingFiles">
@@ -470,7 +470,7 @@
 
         <!-- CENTER: Chat or File viewer -->
         <div class="flex-1 flex flex-col min-w-0">
-            <div class="flex border-b border-gray-800 px-4 shrink-0">
+            <div class="flex h-[41px] border-b border-gray-800 px-4 shrink-0">
                 <button @click="mode='chat'" :class="mode==='chat'?'border-purple-500 text-purple-400':'border-transparent text-gray-500 hover:text-gray-300'" class="px-4 py-2 text-sm font-medium border-b-2 transition">💬 Chat</button>
                 <button @click="mode='viewer'" :class="mode==='viewer'?'border-purple-500 text-purple-400':'border-transparent text-gray-500 hover:text-gray-300'" class="px-4 py-2 text-sm font-medium border-b-2 transition">📄 Viewer</button>
                 <button @click="mode='immersive'" x-show="currentFile" :class="mode==='immersive'?'border-purple-500 text-purple-400':'border-transparent text-gray-500 hover:text-gray-300'" class="px-4 py-2 text-sm font-medium border-b-2 transition">🔍 Immersive</button>
@@ -693,7 +693,7 @@
 
         <!-- RIGHT: Generate panel (desktop) -->
         <div class="w-72 border-l border-gray-800 flex flex-col shrink-0 bg-gray-950 desktop-only">
-            <div class="px-3 py-2 border-b border-gray-800 text-xs text-gray-500 font-medium uppercase tracking-wider">Generate</div>
+            <div class="h-[41px] flex items-center px-3 border-b border-gray-800 text-xs text-gray-500 font-medium uppercase tracking-wider">Generate</div>
             <div class="p-3 space-y-2">
                 <button @click="doGenerate('overview')" :disabled="generating || exampleLoaded"
                     class="w-full text-left bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg p-3 transition disabled:opacity-50">
