@@ -866,7 +866,7 @@ document.addEventListener('DOMContentLoaded',()=>{
         const y2=gy*cosT-gz*sinT;
         const z2=gy*sinT+gz*cosT+PERSPECTIVE;
         const scale=PERSPECTIVE/Math.max(z2,1);
-        return[W/2+gx*scale, H*0.85+y2*scale, z2];
+        return[W/2+gx*scale, H*0.55+y2*scale, z2];
       };
 
       let frame;
