@@ -77,6 +77,7 @@ _circuit = CircuitBreaker(failure_threshold=5, cooldown_seconds=60)
 RETRY_STATUS_CODES = {429, 500, 502, 503}
 RETRY_DELAYS = [2, 4, 8]  # exponential backoff
 REQUEST_TIMEOUT = 120  # seconds
+DEFAULT_MODEL = os.environ.get("LLM_MODEL", "gemini-2.0-flash")
 
 
 def get_circuit_stats() -> dict:
@@ -101,7 +102,7 @@ def _is_retryable(exc) -> bool:
     return False
 
 
-def call_llm(prompt: str, content: str, model: str = "gemini-2.5-pro") -> str:
+def call_llm(prompt: str, content: str, model: str = DEFAULT_MODEL) -> str:
     """Call LLM with system prompt and user content. Returns full response. Retries on transient errors."""
     if _circuit.is_open:
         raise RuntimeError("Service temporarily unavailable (circuit breaker open)")
@@ -139,7 +140,7 @@ def call_llm(prompt: str, content: str, model: str = "gemini-2.5-pro") -> str:
     raise last_exc
 
 
-def call_llm_stream(prompt: str, content: str, model: str = "gemini-2.5-pro"):
+def call_llm_stream(prompt: str, content: str, model: str = DEFAULT_MODEL):
     """Stream LLM response, yielding text chunks. Retries on transient errors."""
     if _circuit.is_open:
         raise RuntimeError("Service temporarily unavailable (circuit breaker open)")
@@ -183,7 +184,7 @@ def call_llm_stream(prompt: str, content: str, model: str = "gemini-2.5-pro"):
     raise last_exc
 
 
-def call_llm_stream_messages(messages: list, model: str = "gemini-2.5-pro"):
+def call_llm_stream_messages(messages: list, model: str = DEFAULT_MODEL):
     """Stream LLM response with a full messages array, yielding text chunks."""
     if _circuit.is_open:
         raise RuntimeError("Service temporarily unavailable (circuit breaker open)")

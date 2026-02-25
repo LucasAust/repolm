@@ -17,6 +17,8 @@ from typing import List, Optional, Dict, Tuple
 # Max file size to include (skip binaries / huge files)
 MAX_FILE_SIZE = 100_000  # 100KB
 MAX_TOTAL_CHARS = 500_000  # 500K chars total budget
+MAX_FILES_TO_WALK = 3000  # Stop walking after this many eligible files
+MAX_FILES_FOR_IMPORT_GRAPH = 1000  # Skip import graph for huge repos
 
 # Files to always include if present (high signal)
 PRIORITY_FILES = [
@@ -144,13 +146,22 @@ def clone_repo(url: str, dest: Optional[str] = None) -> str:
 
     _clone_logger.info("Cloning %s -> %s", url, dest)
     try:
-        subprocess.run(
-            ["git", "clone", "--depth", "1", "--single-branch", url, dest],
-            check=True, capture_output=True, text=True, timeout=60,
+        # Try partial clone first (skips large blobs server-side)
+        result = subprocess.run(
+            ["git", "clone", "--depth", "1", "--single-branch", "--filter=blob:limit=100k", url, dest],
+            capture_output=True, text=True, timeout=120,
         )
+        if result.returncode != 0:
+            # Fallback: some servers don't support partial clone
+            shutil.rmtree(dest, ignore_errors=True)
+            os.makedirs(dest, exist_ok=True)
+            subprocess.run(
+                ["git", "clone", "--depth", "1", "--single-branch", url, dest],
+                check=True, capture_output=True, text=True, timeout=120,
+            )
     except subprocess.TimeoutExpired:
         shutil.rmtree(dest, ignore_errors=True)
-        raise RuntimeError("Git clone timed out after 60 seconds")
+        raise RuntimeError("Git clone timed out after 120 seconds")
     except subprocess.CalledProcessError as e:
         shutil.rmtree(dest, ignore_errors=True)
         raise RuntimeError("Git clone failed: {}".format(e.stderr.strip() if e.stderr else str(e)))
@@ -353,10 +364,18 @@ def _classify_skipped(rel_path: str, size: int) -> str:
     return "other"
 
 
-def ingest_repo(url: str) -> RepoData:
-    """Clone and ingest a GitHub repo into structured data."""
+def ingest_repo(url: str, progress_callback=None) -> RepoData:
+    """Clone and ingest a GitHub repo into structured data.
+    
+    progress_callback: optional callable(status_str, message_str) for progress updates.
+    """
+    if progress_callback:
+        progress_callback("cloning", "Cloning repository...")
     local_path = clone_repo(url)
     repo_name = os.path.basename(local_path)
+
+    if progress_callback:
+        progress_callback("scanning", "Scanning files...")
 
     data = RepoData(
         name=repo_name,
@@ -365,9 +384,10 @@ def ingest_repo(url: str) -> RepoData:
         tree=build_tree(local_path),
     )
 
-    # Collect all eligible files
+    # Collect all eligible files (with cap to avoid spending forever on huge repos)
     all_files = []  # type: List[Tuple[str, str, int, bool, bool, bool]]
     all_rel_paths = []
+    walk_limit_hit = False
 
     for root, dirs, files in os.walk(local_path):
         dirs[:] = [d for d in dirs if not should_skip_dir(d)]
@@ -389,9 +409,21 @@ def ingest_repo(url: str) -> RepoData:
             is_test = is_test_file(rel_path)
             all_files.append((rel_path, fpath, size, is_priority, is_entry, is_test))
             all_rel_paths.append(rel_path)
+            if len(all_files) >= MAX_FILES_TO_WALK:
+                walk_limit_hit = True
+                break
+        if walk_limit_hit:
+            break
 
-    # Build import graph for scoring
-    import_scores = build_import_graph(all_rel_paths, local_path)
+    if progress_callback:
+        progress_callback("processing", "Processing {} files...".format(len(all_files)))
+
+    # Build import graph for scoring (skip for very large repos — too slow)
+    if len(all_rel_paths) <= MAX_FILES_FOR_IMPORT_GRAPH:
+        import_scores = build_import_graph(all_rel_paths, local_path)
+    else:
+        _clone_logger.info("Skipping import graph for %d files (limit %d)", len(all_rel_paths), MAX_FILES_FOR_IMPORT_GRAPH)
+        import_scores = {}
 
     # Score each file: lower score = included first
     def file_sort_key(item):

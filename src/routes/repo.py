@@ -28,9 +28,14 @@ logger = logging.getLogger("repolm")
 def run_ingest(repo_id, url):
     """Background worker: clone and process a repo."""
     try:
-        database.update_job(repo_id, status="ingesting", message="Cloning repository...")
-        data = ingest_repo(url)
-        database.update_job(repo_id, status="processing", message="Processing files...")
+        def _progress(status, message):
+            try:
+                database.update_job(repo_id, status=status, message=message)
+            except Exception:
+                pass
+
+        data = ingest_repo(url, progress_callback=_progress)
+        database.update_job(repo_id, status="processing", message="Building summary ({} files)...".format(len(data.files)))
         text = repo_to_text(data)
         file_list = [{"path": f.path, "content": f.content, "size": f.size, "is_priority": f.is_priority} for f in data.files]
         repo_data = {
