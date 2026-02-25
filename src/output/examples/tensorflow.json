@@ -1,0 +1,1 @@
+{"slug":"tensorflow","repo":"tensorflow/tensorflow","name":"TensorFlow","description":"End-to-end ML platform. Computation graphs, eager execution, Keras API, and hardware acceleration.","tags":["Python","C++","Machine Learning"],"depth":"high-level","expertise":"amateur","overview":true,"podcast":true,"slides":true}

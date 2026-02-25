@@ -1,0 +1,1 @@
+{"slug":"postgres","repo":"postgres/postgres","name":"PostgreSQL","description":"The world's most advanced open source database. Query planner, MVCC, WAL, and extensible type system.","tags":["C","Database","SQL"],"depth":"high-level","expertise":"expert","overview":true,"podcast":true,"slides":true}

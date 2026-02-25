@@ -1,0 +1,1 @@
+{"slug":"redis","repo":"redis/redis","name":"Redis","description":"In-memory data store used as database, cache, and message broker. Event loop, data structures, and persistence.","tags":["C","Database","Cache"],"depth":"high-level","expertise":"amateur","overview":true,"podcast":true,"slides":true}

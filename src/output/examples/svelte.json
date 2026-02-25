@@ -1,0 +1,1 @@
+{"slug":"svelte","repo":"sveltejs/svelte","name":"Svelte","description":"A compiler that turns declarative components into surgical DOM updates. No virtual DOM, no runtime.","tags":["JavaScript","Compiler","Frontend"],"depth":"high-level","expertise":"amateur","overview":true,"podcast":true,"slides":true}
