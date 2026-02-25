@@ -15,7 +15,7 @@
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Geostar&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 
@@ -32,6 +32,7 @@
   --text-2:#8b8b9e;
   --text-3:#45455a;
   --font:'Space Grotesk',system-ui,sans-serif;
+  --font-display:'Geostar','Space Grotesk',system-ui,sans-serif;
   --ease:cubic-bezier(0.33,1,0.68,1);
 }
 
@@ -90,8 +91,9 @@ body::after{
 }
 .hero-inner .eyebrow::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--purple);flex-shrink:0}
 .hero-inner h1{
-  font-size:clamp(3.2rem,8vw,6rem);font-weight:700;line-height:0.95;
-  letter-spacing:-0.045em;margin-bottom:28px;
+  font-family:var(--font-display);
+  font-size:clamp(3.2rem,8vw,6rem);font-weight:400;line-height:1;
+  letter-spacing:0.02em;margin-bottom:28px;
 }
 .hero-inner h1 em{font-style:normal;color:var(--purple)}
 .hero-sub{
