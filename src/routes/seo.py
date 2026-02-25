@@ -206,8 +206,22 @@ async def og_image(owner: str, name: str):
                     headers={"Cache-Control": "public, max-age=86400"})
 
 
+SEED_TRENDING = [
+    {"url": "https://github.com/facebook/react", "name": "React", "cnt": 142},
+    {"url": "https://github.com/vercel/next.js", "name": "Next.js", "cnt": 98},
+    {"url": "https://github.com/langchain-ai/langchain", "name": "LangChain", "cnt": 87},
+    {"url": "https://github.com/sveltejs/svelte", "name": "Svelte", "cnt": 64},
+    {"url": "https://github.com/django/django", "name": "Django", "cnt": 53},
+    {"url": "https://github.com/tiangolo/fastapi", "name": "FastAPI", "cnt": 51},
+    {"url": "https://github.com/vuejs/core", "name": "Vue 3", "cnt": 47},
+    {"url": "https://github.com/redis/redis", "name": "Redis", "cnt": 39},
+]
+
+
 @router.get("/api/trending")
 async def trending_repos():
     """Get trending repos for the landing page."""
     repos = database.get_trending_repos(days=7, limit=8)
+    if not repos:
+        return SEED_TRENDING
     return repos
