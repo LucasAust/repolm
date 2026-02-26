@@ -15,7 +15,7 @@ COPY --from=builder /install /usr/local
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PORT=8000 \
-    WORKERS=3 \
+    WORKERS=1 \
     DATA_DIR=/app/data
 
 RUN mkdir -p /app/data
