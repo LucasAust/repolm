@@ -18,7 +18,7 @@ from typing import List, Optional, Dict, Tuple
 MAX_FILE_SIZE = 100_000  # 100KB
 MAX_TOTAL_CHARS = 500_000  # 500K chars total budget
 MAX_FILES_TO_WALK = 3000  # Stop walking after this many eligible files
-MAX_FILES_FOR_IMPORT_GRAPH = 1000  # Skip import graph for huge repos
+MAX_FILES_FOR_IMPORT_GRAPH = 500  # Skip import graph for huge repos
 
 # Files to always include if present (high signal)
 PRIORITY_FILES = [
@@ -375,7 +375,7 @@ def ingest_repo(url: str, progress_callback=None) -> RepoData:
     repo_name = os.path.basename(local_path)
 
     if progress_callback:
-        progress_callback("scanning", "Scanning files...")
+        progress_callback("scanning", "Scanning file structure...")
 
     data = RepoData(
         name=repo_name,
@@ -416,7 +416,7 @@ def ingest_repo(url: str, progress_callback=None) -> RepoData:
             break
 
     if progress_callback:
-        progress_callback("processing", "Processing {} files...".format(len(all_files)))
+        progress_callback("processing", "Analyzing {} files...".format(len(all_files)))
 
     # Build import graph for scoring (skip for very large repos — too slow)
     if len(all_rel_paths) <= MAX_FILES_FOR_IMPORT_GRAPH:
@@ -424,6 +424,9 @@ def ingest_repo(url: str, progress_callback=None) -> RepoData:
     else:
         _clone_logger.info("Skipping import graph for %d files (limit %d)", len(all_rel_paths), MAX_FILES_FOR_IMPORT_GRAPH)
         import_scores = {}
+
+    if progress_callback:
+        progress_callback("processing", "Ranking {} files by importance...".format(len(all_files)))
 
     # Score each file: lower score = included first
     def file_sort_key(item):

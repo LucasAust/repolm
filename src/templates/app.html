@@ -430,9 +430,14 @@
 <!-- Loading repo -->
 <template x-if="repoId && !repoReady && !repoError">
     <div class="flex-1 flex items-center justify-center">
-        <div class="text-center">
+        <div class="text-center max-w-sm">
             <div class="spinner mb-4" style="width:32px;height:32px;border-width:3px"></div>
             <p class="text-white font-medium" x-text="repoMessage"></p>
+            <div class="mt-3 w-64 mx-auto bg-gray-800 rounded-full h-1.5 overflow-hidden">
+                <div class="h-full bg-purple-500 rounded-full transition-all duration-500"
+                     :style="`width: ${ingestProgress}%`"></div>
+            </div>
+            <p class="text-gray-500 text-xs mt-2" x-text="ingestElapsed"></p>
         </div>
     </div>
 </template>
@@ -798,6 +803,10 @@ function repolm() {
         repoMessage: '',
         loadingRepo: false,
         loadingFiles: false,
+        ingestProgress: 0,
+        ingestElapsed: '',
+        _ingestStart: null,
+        _ingestTimer: null,
         files: [],
         currentFile: null,
         fileContent: null,
@@ -1205,6 +1214,16 @@ function repolm() {
                 if (res.status === 402) { this.handleInsufficientTokens(data.required, data.balance); this.loadingRepo = false; return; }
                 if (data.error) { this.repoError = data.error; this.loadingRepo = false; return; }
                 this.repoId = data.repo_id;
+                if (data.cached) {
+                    // Instant cache hit — skip polling
+                    this.repoReady = true;
+                    this.loadingRepo = false;
+                    this.repoData = {};
+                    this.loadFiles();
+                    // Fetch repo data
+                    fetch(`/api/repo/${this.repoId}`).then(r => r.json()).then(d => { this.repoData = d.data || {}; });
+                    return;
+                }
                 if (data.queued && data.queue_position) {
                     this.queuePosition = data.queue_position;
                     this.repoMessage = `Queued (#${data.queue_position})...`;
@@ -1217,6 +1236,13 @@ function repolm() {
         },
 
         async pollRepo() {
+            this._ingestStart = Date.now();
+            this.ingestProgress = 5;
+            const progressMap = {cloning: 15, scanning: 35, processing: 60, ready: 100, error: 0};
+            this._ingestTimer = setInterval(() => {
+                const s = Math.floor((Date.now() - this._ingestStart) / 1000);
+                this.ingestElapsed = s < 60 ? `${s}s` : `${Math.floor(s/60)}m ${s%60}s`;
+            }, 1000);
             const iv = setInterval(async () => {
                 try {
                     const res = await fetch(`/api/repo/${this.repoId}`);
@@ -1224,24 +1250,32 @@ function repolm() {
                     if (data.queue_position) {
                         this.queuePosition = data.queue_position;
                         this.repoMessage = `⏳ Queued (#${data.queue_position})...`;
+                        this.ingestProgress = 5;
                     } else {
                         this.queuePosition = null;
                         this.repoMessage = data.message;
+                        // Map status to progress
+                        const p = progressMap[data.status];
+                        if (p && p > this.ingestProgress) this.ingestProgress = p;
                     }
                     this.repoData = data.data || {};
                     if (data.status === 'ready') {
                         clearInterval(iv);
+                        clearInterval(this._ingestTimer);
+                        this.ingestProgress = 100;
                         this.repoReady = true;
                         this.loadingRepo = false;
                         this.loadFiles();
                     } else if (data.status === 'error') {
                         clearInterval(iv);
+                        clearInterval(this._ingestTimer);
                         this.repoError = data.message;
                         this.repoId = null;
                         this.loadingRepo = false;
                     }
                 } catch(e) {
                     clearInterval(iv);
+                    clearInterval(this._ingestTimer);
                     this.repoError = 'Connection lost';
                     this.loadingRepo = false;
                 }

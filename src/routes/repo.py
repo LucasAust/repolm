@@ -154,6 +154,14 @@ async def add_repo(request: Request):
     if "github.com" not in url and "gitlab.com" not in url:
         return JSONResponse({"error": "Please provide a valid GitHub or GitLab URL"}, 400)
 
+    # Check URL-based cache first (skip re-clone for recently ingested repos)
+    cached_id = state.find_cached_repo_by_url(url)
+    if cached_id:
+        cached_repo = state.get_repo_with_fallback(cached_id)
+        if cached_repo and cached_repo.get("status") == "ready":
+            logger.info("Cache hit for %s -> %s", url, cached_id)
+            return {"repo_id": cached_id, "token_cost": 0, "cached": True}
+
     # Per-IP ingest limit
     ip = request.client.host if request.client else "unknown"
     ip_ctx = acquire_ingest(ip)

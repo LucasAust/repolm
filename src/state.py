@@ -190,6 +190,26 @@ def get_repo_with_fallback(repo_id: str) -> Optional[dict]:
     return None
 
 
+def find_cached_repo_by_url(url: str) -> Optional[str]:
+    """Find a recently cached repo_id by URL (< 2 hours old). Returns repo_id or None."""
+    try:
+        normalized = url.strip().lower().rstrip("/").replace(".git", "")
+        conn = sqlite3.connect(REPO_CACHE_DB)
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            """SELECT repo_id FROM repo_cache
+               WHERE status='ready' AND json_extract(data_json, '$.url') LIKE ?
+               AND accessed_at > ? ORDER BY accessed_at DESC LIMIT 1""",
+            (f"%{normalized.split('github.com/')[-1]}%", time.time() - 7200)
+        ).fetchone()
+        conn.close()
+        if row:
+            return row["repo_id"]
+    except Exception:
+        logger.exception("find_cached_repo_by_url failed")
+    return None
+
+
 # ── Disk Cleanup ──
 def cleanup_disk() -> dict:
     """Clean up old audio, clone, and PPTX files. Returns summary."""
