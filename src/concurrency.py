@@ -16,9 +16,9 @@ from typing import Any, Callable, Dict, Optional, Tuple
 logger = logging.getLogger("repolm")
 
 # ── Thread Pools ──
-INGEST_WORKERS = int(os.environ.get("INGEST_WORKERS", "8"))
-GENERATE_WORKERS = int(os.environ.get("GENERATE_WORKERS", "12"))
-AUDIO_WORKERS = int(os.environ.get("AUDIO_WORKERS", "4"))
+INGEST_WORKERS = int(os.environ.get("INGEST_WORKERS", "2"))
+GENERATE_WORKERS = int(os.environ.get("GENERATE_WORKERS", "4"))
+AUDIO_WORKERS = int(os.environ.get("AUDIO_WORKERS", "2"))
 
 ingest_pool = ThreadPoolExecutor(max_workers=INGEST_WORKERS, thread_name_prefix="ingest")
 generate_pool = ThreadPoolExecutor(max_workers=GENERATE_WORKERS, thread_name_prefix="generate")
