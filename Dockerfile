@@ -32,9 +32,9 @@ CMD gunicorn app:app \
     -w ${WORKERS} \
     -k uvicorn.workers.UvicornWorker \
     -b 0.0.0.0:${PORT} \
-    --timeout 120 \
+    --timeout 600 \
     --graceful-timeout 30 \
-    --max-requests 1000 \
+    --max-requests 500 \
     --max-requests-jitter 50 \
     --worker-connections 1000 \
     --keep-alive 5 \
