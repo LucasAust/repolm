@@ -593,11 +593,11 @@
                         </template>
                         <!-- Overview with collapsible sections -->
                         <template x-if="viewingGenerated && viewingGenerated.kind==='overview'">
-                            <div class="prose prose-invert prose-sm max-w-none overview-content" x-html="renderOverview(viewingContent)"></div>
+                            <div class="prose prose-invert prose-sm max-w-none overview-content" x-html="renderOverview(renderedContent)"></div>
                         </template>
                         <!-- Podcast conversation view -->
                         <template x-if="viewingGenerated && viewingGenerated.kind==='podcast'">
-                            <div x-html="renderPodcast(viewingContent)"></div>
+                            <div x-html="renderPodcast(renderedContent)"></div>
                         </template>
                         <!-- Inline upgrade prompt -->
                         <template x-if="viewingGenerated && viewingGenerated.kind==='upgrade'">
@@ -613,7 +613,7 @@
                             </div>
                         </template>
                         <!-- Generic generated content -->
-                        <div x-show="viewingGenerated && viewingGenerated.kind!=='slides' && viewingGenerated.kind!=='overview' && viewingGenerated.kind!=='podcast' && viewingGenerated.kind!=='upgrade'" class="prose prose-invert prose-sm max-w-none" x-html="renderMd(viewingContent)"></div>
+                        <div x-show="viewingGenerated && viewingGenerated.kind!=='slides' && viewingGenerated.kind!=='overview' && viewingGenerated.kind!=='podcast' && viewingGenerated.kind!=='upgrade'" class="prose prose-invert prose-sm max-w-none" x-html="renderMd(renderedContent)"></div>
                         <!-- Code skeleton while loading -->
                         <div x-show="!viewingGenerated && !fileContent && currentFile" class="bg-gray-900 rounded-lg p-4 code-skeleton">
                             <template x-for="i in 20" :key="'cs'+i">
@@ -827,6 +827,9 @@ function repolm() {
         streamTimer: null,
         streamAbortController: null,
         copyLabel: '📋 Copy',
+        _hlDebounce: null,
+        _renderDebounce: null,
+        renderedContent: '',
         audioProgressText: 'Generating audio...',
         mobileDrawer: null,  // 'files' | 'generate' | null
         slideDirection: 'right',  // for slide animation
@@ -1147,7 +1150,7 @@ function repolm() {
 
                 // Add pre-generated content
                 this.generated = preGenerated;
-                if (this.generated.length) this.viewGenerated(this.generated[0]);
+                // if (this.generated.length) this.viewGenerated(this.generated[0]);
             } catch(e) { console.error(e); }
         },
 
@@ -1398,6 +1401,7 @@ function repolm() {
             this.mode = 'viewer';
             this.viewingGenerated = {kind, label: '📄 ' + kind.charAt(0).toUpperCase() + kind.slice(1)};
             this.viewingContent = '';
+            this.renderedContent = '';
             this.currentFile = null;
             this.audioUrl = null;
             this.currentSlide = 0;
@@ -1451,11 +1455,22 @@ function repolm() {
                             } else if (eventType === 'chunk') {
                                 this.viewingContent += payload;
                                 this.streamWordCount = this.viewingContent.split(/\s+/).length;
+                                if (!this._renderDebounce) {
+                                    this._renderDebounce = setTimeout(() => {
+                                        this.renderedContent = this.viewingContent;
+                                        this._renderDebounce = null;
+                                    }, 300);
+                                }
                                 this.$nextTick(() => {
                                     const v = document.querySelector('.viewer');
                                     if (v) v.scrollTop = v.scrollHeight;
-                                    document.querySelectorAll('.viewer .prose pre code').forEach(el => { if(!el.dataset.highlighted) { hljs.highlightElement(el); el.dataset.highlighted='true'; }});
                                 });
+                                if (!this._hlDebounce) {
+                                    this._hlDebounce = setTimeout(() => {
+                                        document.querySelectorAll('.viewer .prose pre code').forEach(el => { if(!el.dataset.highlighted) { hljs.highlightElement(el); el.dataset.highlighted='true'; }});
+                                        this._hlDebounce = null;
+                                    }, 500);
+                                }
                             } else if (eventType === 'error') {
                                 this.messages.push({role:'assistant', text:'Error: ' + payload});
                             }
@@ -1465,6 +1480,7 @@ function repolm() {
                 if (this.streamTimer) { clearInterval(this.streamTimer); this.streamTimer = null; }
                 this.generating = false;
                 this.streamAbortController = null;
+                this.renderedContent = this.viewingContent;
                 const item = {kind, depth:this.depth, expertise:this.expertise, content:this.viewingContent};
                 this.generated.push(item);
                 this.trackRepoAnalysis();
@@ -1500,6 +1516,7 @@ function repolm() {
             this.mode = 'viewer';
             this.viewingGenerated = {kind: item.kind, label: '📄 ' + item.kind.charAt(0).toUpperCase() + item.kind.slice(1)};
             this.viewingContent = item.content;
+            this.renderedContent = item.content;
             this.currentFile = null;
             this.audioUrl = null;
             this.parsedSlides = [];
