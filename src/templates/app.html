@@ -1296,6 +1296,8 @@ function repolm() {
                     this.loadFiles();
                     // Fetch repo data
                     fetch(`/api/repo/${this.repoId}`).then(r => r.json()).then(d => { this.repoData = d.data || {}; });
+                    // Auto-save to account
+                    if (this.user && !this.savedDbId) this.saveRepo();
                     return;
                 }
                 if (data.queued && data.queue_position) {
@@ -1340,6 +1342,8 @@ function repolm() {
                         this.repoReady = true;
                         this.loadingRepo = false;
                         this.loadFiles();
+                        // Auto-save to account
+                        if (this.user && !this.savedDbId) this.saveRepo();
                     } else if (data.status === 'error') {
                         clearInterval(iv);
                         clearInterval(this._ingestTimer);
@@ -1553,6 +1557,13 @@ function repolm() {
                     } else {
                         this.showAuthModal = true;
                     }
+                    return;
+                }
+                if (!res.ok) {
+                    try { const data = await res.json(); this.viewingContent = 'Error: ' + (data.error || 'Generation failed'); } catch(e) { this.viewingContent = 'Error: Generation failed (status ' + res.status + ')'; }
+                    this.renderedContent = this.viewingContent;
+                    this.generating = false;
+                    if (this.streamTimer) { clearInterval(this.streamTimer); this.streamTimer = null; }
                     return;
                 }
                 const reader = res.body.getReader();
