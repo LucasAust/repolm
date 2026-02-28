@@ -16,7 +16,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from config import CARBON_SERVE, CARBON_PLACEMENT, ALLOWED_ORIGINS, validate_config
 from auth import router as auth_router
@@ -75,62 +75,102 @@ if STATIC_DIR.is_dir():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
-# ── Security Headers Middleware ──
-class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        response = await call_next(request)
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-XSS-Protection"] = "1; mode=block"
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        if request.url.scheme == "https":
-            response.headers["Strict-Transport-Security"] = "max-age=31536000"
-        return response
+# ── Pure ASGI Middleware ──
+# NOTE: We avoid BaseHTTPMiddleware entirely because it wraps StreamingResponse
+# bodies through background tasks + memory channels, which breaks SSE streaming
+# after the first request completes (known Starlette issue in <= 0.27).
 
 
-# ── Request Size Limit Middleware ──
-class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        content_length = request.headers.get("content-length")
+class SecurityHeadersMiddleware:
+    """Add security headers to all responses (pure ASGI, no body wrapping)."""
+
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_headers(message):
+            if message["type"] == "http.response.start":
+                headers = dict(message.get("headers", []))
+                extra = [
+                    (b"x-content-type-options", b"nosniff"),
+                    (b"x-frame-options", b"DENY"),
+                    (b"x-xss-protection", b"1; mode=block"),
+                    (b"referrer-policy", b"strict-origin-when-cross-origin"),
+                ]
+                scheme = scope.get("scheme", "http")
+                if scheme == "https":
+                    extra.append((b"strict-transport-security", b"max-age=31536000"))
+                message = {**message, "headers": list(message.get("headers", [])) + extra}
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
+
+
+class RequestSizeLimitMiddleware:
+    """Reject requests with Content-Length > MAX_REQUEST_BODY (pure ASGI)."""
+
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        headers = dict(scope.get("headers", []))
+        content_length = headers.get(b"content-length")
         if content_length and int(content_length) > MAX_REQUEST_BODY:
-            return JSONResponse({"error": "Request body too large (max 50MB)"}, 413)
-        return await call_next(request)
+            response = JSONResponse({"error": "Request body too large (max 50MB)"}, 413)
+            await response(scope, receive, send)
+            return
+
+        await self.app(scope, receive, send)
 
 
-# ── Request Timeout Middleware ──
-class RequestTimeoutMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        # Skip timeout for SSE streaming endpoints
-        if "stream" in request.url.path or request.url.path.startswith("/api/podcast-audio"):
-            return await call_next(request)
-        try:
-            return await asyncio.wait_for(call_next(request), timeout=REQUEST_TIMEOUT)
-        except asyncio.TimeoutError:
-            logger.warning("Request timeout: %s %s", request.method, request.url.path)
-            return JSONResponse({"error": "Request timeout"}, 504)
+class RequestLoggingMiddleware:
+    """Log requests with timing and request ID (pure ASGI)."""
 
+    def __init__(self, app: ASGIApp):
+        self.app = app
 
-# ── Request Logging & ID Middleware ──
-class RequestLoggingMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
         request_id = str(uuid.uuid4())[:8]
         start = time.time()
+        path = scope.get("path", "")
+        method = scope.get("method", "")
+        status_code = 0
+
+        async def send_with_logging(message):
+            nonlocal status_code
+            if message["type"] == "http.response.start":
+                status_code = message.get("status", 0)
+                extra_headers = [(b"x-request-id", request_id.encode())]
+                message = {**message, "headers": list(message.get("headers", [])) + extra_headers}
+            elif message["type"] == "http.response.body" and not message.get("more_body", False):
+                elapsed = (time.time() - start) * 1000
+                if not path.startswith("/static"):
+                    logger.info("%s %s %d %.0fms [%s]", method, path, status_code, elapsed, request_id)
+            await send(message)
+
         try:
-            response = await call_next(request)
-            elapsed = (time.time() - start) * 1000
-            response.headers["X-Request-ID"] = request_id
-            if not request.url.path.startswith("/static"):
-                logger.info("%s %s %d %.0fms [%s]", request.method, request.url.path, response.status_code, elapsed, request_id)
-            return response
+            await self.app(scope, receive, send_with_logging)
         except Exception:
             elapsed = (time.time() - start) * 1000
-            logger.exception("Unhandled error %s %s %.0fms [%s]", request.method, request.url.path, elapsed, request_id)
-            return JSONResponse({"error": "Internal server error", "request_id": request_id}, 500)
+            logger.exception("Unhandled error %s %s %.0fms [%s]", method, path, elapsed, request_id)
+            response = JSONResponse({"error": "Internal server error", "request_id": request_id}, 500)
+            await response(scope, receive, send)
 
 
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestSizeLimitMiddleware)
-app.add_middleware(RequestTimeoutMiddleware)
 app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(
     CORSMiddleware,
