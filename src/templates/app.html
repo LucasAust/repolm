@@ -1405,6 +1405,11 @@ function repolm() {
                     this.chatLoading = false;
                     return;
                 }
+                if (!res.ok) {
+                    try { const data = await res.json(); this.messages[msgIdx].text = 'Error: ' + (data.error || 'Request failed'); } catch(e) { this.messages[msgIdx].text = 'Error: Request failed (status ' + res.status + ')'; }
+                    this.chatLoading = false;
+                    return;
+                }
                 const reader = res.body.getReader();
                 const decoder = new TextDecoder();
                 let buffer = '';
@@ -1467,6 +1472,10 @@ function repolm() {
                     const data = await res.json();
                     this.immersiveMessages.pop();
                     this.handleInsufficientTokens(data.required, data.balance);
+                    return;
+                }
+                if (!res.ok) {
+                    try { const data = await res.json(); this.immersiveMessages[msgIdx].text = 'Error: ' + (data.error || 'Request failed'); } catch(e) { this.immersiveMessages[msgIdx].text = 'Error: Request failed (status ' + res.status + ')'; }
                     return;
                 }
                 const reader = res.body.getReader();
