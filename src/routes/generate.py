@@ -270,14 +270,19 @@ async def chat_stream(repo_id: str, request: Request):
     async def event_stream():
         try:
             async with sse_semaphore:
+                chunk_count = 0
+                logger.info("Chat stream starting for repo %s (immersive=%s, msgs=%d)", repo_id, is_immersive, len(messages_list))
                 async for chunk in async_call_llm_stream_messages(messages_list):
+                    chunk_count += 1
                     yield sse_format(chunk, "chunk")
+                logger.info("Chat stream done for repo %s — %d chunks", repo_id, chunk_count)
                 if user:
                     await db_async.spend_tokens(user["id"], cost, "Immersive question" if is_immersive else "Chat message")
                 new_balance = await db_async.get_token_balance(user["id"]) if user else None
                 yield sse_format(json.dumps({"cost": cost, "balance": new_balance}), "meta")
                 yield sse_format("", "done")
         except Exception as e:
+            logger.exception("Chat stream error for repo %s", repo_id)
             yield sse_format(str(e), "error")
         finally:
             sse_ctx.release()

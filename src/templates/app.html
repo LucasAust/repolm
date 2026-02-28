@@ -1494,6 +1494,8 @@ function repolm() {
                             const payload = JSON.parse(line.slice(6));
                             if (eventType === 'chunk') {
                                 this.immersiveMessages[msgIdx].text += payload;
+                            } else if (eventType === 'error') {
+                                this.immersiveMessages[msgIdx].text += '\n\n⚠️ Error: ' + payload;
                             } else if (eventType === 'meta') {
                                 try { const meta = JSON.parse(payload); if (meta.balance !== undefined) this.userTokens = meta.balance; } catch(e) {}
                             }
