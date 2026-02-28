@@ -94,8 +94,11 @@ def get_circuit_stats() -> dict:
 
 import asyncio
 import queue as _queue
+from concurrent.futures import ThreadPoolExecutor
 
 _SENTINEL = object()
+# Dedicated pool for LLM streaming — never competes with DB or other I/O
+_llm_pool = ThreadPoolExecutor(max_workers=10, thread_name_prefix="llm-stream")
 
 
 async def async_call_llm_stream(prompt: str, content: str, model: str = DEFAULT_MODEL):
@@ -111,7 +114,7 @@ async def async_call_llm_stream(prompt: str, content: str, model: str = DEFAULT_
             q.put(exc)
 
     loop = asyncio.get_event_loop()
-    loop.run_in_executor(None, _producer)
+    loop.run_in_executor(_llm_pool, _producer)
 
     while True:
         # Non-blocking poll so we don't starve the event loop
@@ -142,7 +145,7 @@ async def async_call_llm_stream_messages(messages: list, model: str = DEFAULT_MO
             q.put(exc)
 
     loop = asyncio.get_event_loop()
-    loop.run_in_executor(None, _producer)
+    loop.run_in_executor(_llm_pool, _producer)
 
     while True:
         while True:
