@@ -164,10 +164,11 @@ STRUCTURE (follow these beats):
 6. **Practical Takeaways** (2 min): What can listeners apply to their own projects?
 7. **Homework** (1 min): Give listeners a specific challenge — "go look at [file] and try to [task]"
 
-STAGE DIRECTIONS — Use these for natural audio pacing:
-- [LAUGHS] — genuine amusement
-- [PAUSE] — thinking moment, dramatic beat
-- [TYPING SOUNDS] — when referencing specific code
+NATURAL REACTIONS — Instead of stage directions like [LAUGHS], write out the actual vocal reaction:
+- Laughter: "Ha!", "Haha, okay", "Oh man that's good"
+- Thinking: "Hmm...", "So...", "Let me think about this..."
+- Surprise: "Wait what?", "Oh wow", "No way"
+- NEVER write [LAUGHS], [PAUSE], [TYPING SOUNDS] or any bracketed stage directions — the audio will read them literally
 
 Rules:
 - Reference SPECIFIC files, function names, and code patterns from the repository — this is what makes it feel real, not generic

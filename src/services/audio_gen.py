@@ -21,6 +21,9 @@ def parse_podcast_script(text):
         # Strip markdown bold/code
         dialogue = re.sub(r'\*\*(.+?)\*\*', r'\1', dialogue)
         dialogue = re.sub(r'`(.+?)`', r'\1', dialogue)
+        # Remove stage directions like [LAUGHS], [PAUSE], [TYPING SOUNDS], etc.
+        dialogue = re.sub(r'\[([A-Z\s]+)\]', '', dialogue)
+        dialogue = dialogue.strip()
         if dialogue:
             lines.append((speaker, dialogue))
     return lines
