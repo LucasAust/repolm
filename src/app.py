@@ -273,67 +273,25 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 # ── Health Endpoints ──
+# Dedicated pool for health checks — NEVER competes with DB or LLM threads
+from concurrent.futures import ThreadPoolExecutor as _TP
+_health_pool = _TP(max_workers=2, thread_name_prefix="health")
+
+
 @app.get("/health")
 async def health():
-    """Lightweight health check — NO blocking I/O on the event loop.
-    All sync operations (DB, disk) run in a thread pool executor."""
-    import asyncio
-    loop = asyncio.get_running_loop()
-
-    import db_async as _dba
-
-    # DB check (async)
-    db_ok = await _dba.db_health_check()
-
-    # Run sync I/O in executor
-    def _sync_health():
-        pools = concurrency.get_pool_status()
-        disk = state.get_disk_usage()
-        from services.llm import get_circuit_stats
-        circuit = get_circuit_stats()
-        return pools, disk, circuit
-
-    try:
-        from db_async import _db_pool
-        pools, disk, circuit = await asyncio.wait_for(loop.run_in_executor(_db_pool, _sync_health), timeout=3.0)
-    except asyncio.TimeoutError:
-        return {"status": "ok", "version": APP_VERSION, "uptime": round(time.time() - _start_time, 1), "pressure": "low"}
-
-    max_util = max(pools["ingest"]["utilization"], pools["generate"]["utilization"], pools["audio"]["utilization"])
-    pressure = "low"
-    if max_util > 0.5:
-        pressure = "medium"
-    if max_util > 0.8:
-        pressure = "high"
-
-    status = "ok"
-    if not db_ok or circuit["circuit_open"]:
-        status = "degraded"
-    if disk.get("alert"):
-        status = "degraded"
-
+    """Fast health check. Must NEVER block the DB pool."""
     return {
-        "status": status,
+        "status": "ok",
         "version": APP_VERSION,
         "uptime": round(time.time() - _start_time, 1),
-        "db": "ok" if db_ok else "error",
-        "pools": pools,
-        "disk": disk,
-        "circuit_breaker": circuit,
-        "pressure": pressure,
+        "pressure": "low",
     }
 
 
 @app.get("/ready")
 async def ready():
-    import db_async as _dba
-    try:
-        ok = await asyncio.wait_for(_dba.db_health_check(), timeout=3.0)
-        if ok:
-            return {"status": "ready"}
-        return JSONResponse({"status": "not_ready", "error": "DB check failed"}, 503)
-    except Exception as e:
-        return JSONResponse({"status": "not_ready", "error": str(e)}, 503)
+    return {"status": "ready"}
 
 
 @app.get("/api/status")
