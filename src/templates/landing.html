@@ -748,6 +748,13 @@ section{padding:clamp(100px,14vw,160px) 0}
 <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded',()=>{
+  // Fix bfcache: when page is restored from back/forward cache,
+  // GSAP animations are dead and elements may be stuck at opacity:0.
+  // Force a clean reload to re-run all animations.
+  window.addEventListener('pageshow', (e) => {
+    if (e.persisted) window.location.reload();
+  });
+
   // Nav
   const nav=document.getElementById('nav');
   window.addEventListener('scroll',()=>nav.classList.toggle('scrolled',scrollY>50),{passive:true});
