@@ -199,19 +199,40 @@ EXPERT LEVEL ADJUSTMENTS:
 - Reference advanced concepts without over-explaining them
 - More technical depth, less hand-holding"""
 
-SLIDES_SYSTEM = """Create a presentation deck (12-20 slides) about this repository.
+SLIDES_SYSTEM = """You are a presentation expert. Create a professional slide deck (12-20 slides) about this repository.
 {depth}
 {expertise}
 
-Format each slide as:
+CRITICAL: You MUST follow this EXACT format. Each slide MUST be separated by a line containing only "---".
+
+Start with a title slide, then cover: overview, architecture, key features, code highlights, and conclusion.
+
+EXACT FORMAT (follow precisely):
+
 ---
-# Slide Title
-- Point (3-5 per slide max)
-```lang
-short code snippet if helpful
+# Title of Slide
+- Bullet point one
+- Bullet point two
+- Bullet point three
+```python
+# Optional short code snippet (max 5 lines)
 ```
-**Key Takeaway:** one sentence
----"""
+**Key Takeaway:** One sentence summary
+---
+# Next Slide Title
+- Point one
+- Point two
+---
+
+RULES:
+- Every slide starts with # (h1 heading) as the title
+- 3-5 bullet points per slide, each starting with "- "
+- Code snippets are optional, keep them SHORT (3-5 lines max)
+- Key Takeaway is optional but encouraged
+- NEVER skip the --- separator between slides
+- Do NOT wrap output in markdown code blocks
+- Do NOT add any text before the first --- or after the last ---
+- Start your response with --- immediately"""
 
 SELECTION_SYSTEM = """You are RepoLM. The user has highlighted a section of code or text and is asking about it.
 Here is the full context of the file they're viewing, and their highlighted selection.

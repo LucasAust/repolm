@@ -590,6 +590,21 @@
                         <!-- Slide deck viewer -->
                         <template x-if="viewingGenerated && viewingGenerated.kind==='slides' && parsedSlides.length > 0">
                             <div @keydown.window="handleSlideKey($event)">
+                                <!-- PPTX download banner -->
+                                <div class="mb-4 bg-gradient-to-r from-purple-900/40 to-indigo-900/40 border border-purple-700/50 rounded-xl p-4 flex items-center justify-between">
+                                    <div class="flex items-center gap-3">
+                                        <span class="text-3xl">📊</span>
+                                        <div>
+                                            <p class="text-white font-semibold text-sm">PowerPoint Ready</p>
+                                            <p class="text-gray-400 text-xs" x-text="pptxLoading ? 'Building your PPTX...' : (pptxUrl ? 'Your presentation is ready to download' : 'Click to generate PPTX')"></p>
+                                        </div>
+                                    </div>
+                                    <button @click="downloadPptx()" :disabled="pptxLoading" class="bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 text-white font-semibold px-5 py-2.5 rounded-xl flex items-center gap-2 transition">
+                                        <span x-show="pptxLoading" class="spinner"></span>
+                                        <span x-show="!pptxLoading">📥 Download PPTX</span>
+                                    </button>
+                                </div>
+                                <!-- Slide navigation -->
                                 <div class="flex items-center justify-between mb-4">
                                     <div class="flex items-center gap-2">
                                         <button @click="prevSlide()" :disabled="currentSlide===0" class="bg-gray-800 hover:bg-gray-700 disabled:opacity-30 text-white px-3 py-1.5 rounded-lg text-sm transition">← Prev</button>
@@ -599,7 +614,6 @@
                                     </div>
                                     <div class="flex items-center gap-2">
                                         <button @click="slideFullscreen=!slideFullscreen" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg transition">⛶ Fullscreen</button>
-                                        <button @click="downloadPptx()" class="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg flex items-center gap-1">📥 Download PPTX</button>
                                     </div>
                                 </div>
                                 <div class="bg-gray-900 border border-gray-700 rounded-2xl p-8 min-h-[400px] flex flex-col justify-center shadow-lg touch-swipe"
@@ -863,6 +877,8 @@ function repolm() {
         parsedSlides: [],
         currentSlide: 0,
         slideFullscreen: false,
+        pptxUrl: null,
+        pptxLoading: false,
         streamWordCount: 0,
         streamElapsed: 0,
         streamTimer: null,
@@ -1498,6 +1514,8 @@ function repolm() {
             this.audioUrl = null;
             this.currentSlide = 0;
             this.parsedSlides = [];
+            this.pptxUrl = null;
+            this.pptxLoading = false;
             this.fromCache = false;
 
             try {
@@ -1577,7 +1595,10 @@ function repolm() {
                 this.generated.push(item);
                 this.trackRepoAnalysis();
                 // Re-render with proper formatting after stream completes
-                if (kind === 'slides') this.parseSlides();
+                if (kind === 'slides') {
+                    this.parseSlides();
+                    this.autoBuildPptx();
+                }
                 // Force re-render for overview (collapsible sections) and podcast (chat bubbles)
                 // by triggering a reactive update
                 const saved = this.viewingContent;
@@ -1633,7 +1654,28 @@ function repolm() {
         nextSlide() { if (this.currentSlide < this.parsedSlides.length - 1) { this.slideDirection='right'; this.currentSlide++; this.highlightSlides(); } },
         prevSlide() { if (this.currentSlide > 0) { this.slideDirection='left'; this.currentSlide--; this.highlightSlides(); } },
 
+        async autoBuildPptx() {
+            this.pptxLoading = true;
+            this.pptxUrl = null;
+            try {
+                const res = await fetch('/api/slides-pptx', {
+                    method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({markdown: this.viewingContent, repo_name: this.repoData.name || 'repo'})
+                });
+                if (res.ok) {
+                    const blob = await res.blob();
+                    this.pptxUrl = URL.createObjectURL(blob);
+                }
+            } catch(e) { console.error('PPTX build failed', e); }
+            this.pptxLoading = false;
+        },
+
         async downloadPptx() {
+            if (this.pptxUrl) {
+                const a = document.createElement('a');
+                a.href = this.pptxUrl; a.download = (this.repoData.name || 'repo') + '_slides.pptx'; a.click();
+                return;
+            }
             try {
                 const res = await fetch('/api/slides-pptx', {
                     method:'POST', headers:{'Content-Type':'application/json'},
