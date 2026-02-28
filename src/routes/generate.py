@@ -19,7 +19,7 @@ from auth import get_current_user
 import db as database
 import state
 import cache as content_cache
-from services.llm import call_llm, call_llm_stream, call_llm_stream_messages
+from services.llm import call_llm, call_llm_stream, call_llm_stream_messages, async_call_llm_stream, async_call_llm_stream_messages
 from routes._helpers import check_rate_limit, sse_format
 from concurrency import generate_queue, sse_semaphore, acquire_sse
 
@@ -165,7 +165,7 @@ async def generate_stream(repo_id: str, request: Request):
                     yield sse_format("", "done")
                 else:
                     full_content = ""
-                    for chunk in call_llm_stream(system, prompts[kind]):
+                    async for chunk in async_call_llm_stream(system, prompts[kind]):
                         full_content += chunk
                         yield sse_format(chunk, "chunk")
                     if repo_url and full_content:
@@ -275,7 +275,7 @@ async def chat_stream(repo_id: str, request: Request):
     async def event_stream():
         try:
             async with sse_semaphore:
-                for chunk in call_llm_stream_messages(messages_list):
+                async for chunk in async_call_llm_stream_messages(messages_list):
                     yield sse_format(chunk, "chunk")
                 if user:
                     database.spend_tokens(user["id"], cost, "Immersive question" if is_immersive else "Chat message")

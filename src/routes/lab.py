@@ -15,6 +15,8 @@ import db as database
 import state
 from services.concept_gen import generate_concept_repo_stream, parse_generated_repo
 from routes._helpers import sse_format
+import asyncio
+import queue as _queue
 
 router = APIRouter()
 
@@ -39,12 +41,37 @@ async def concept_lab(request: Request):
 
     database.spend_tokens(user["id"], cost, f"Concept Lab: {concept[:50]}")
 
-    def event_stream():
+    async def event_stream():
         full_text = ""
         try:
-            for chunk in generate_concept_repo_stream(concept, language, difficulty):
-                full_text += chunk
-                yield sse_format(chunk, "chunk")
+            _SENTINEL = object()
+            q: _queue.Queue = _queue.Queue(maxsize=64)
+
+            def _producer():
+                try:
+                    for chunk in generate_concept_repo_stream(concept, language, difficulty):
+                        q.put(chunk)
+                    q.put(_SENTINEL)
+                except Exception as exc:
+                    q.put(exc)
+
+            loop = asyncio.get_event_loop()
+            loop.run_in_executor(None, _producer)
+
+            while True:
+                while True:
+                    try:
+                        item = q.get_nowait()
+                        break
+                    except _queue.Empty:
+                        await asyncio.sleep(0.01)
+                        continue
+                if item is _SENTINEL:
+                    break
+                if isinstance(item, Exception):
+                    raise item
+                full_text += item
+                yield sse_format(item, "chunk")
             repo = parse_generated_repo(full_text)
             if repo:
                 repo_id = str(uuid.uuid4())[:8]

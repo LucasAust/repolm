@@ -2,6 +2,10 @@
 RepoLM — LLM service: call_llm, call_llm_stream, call_llm_stream_messages.
 Wraps OpenAI-compatible API (Gemini via Google endpoint or OpenAI direct).
 Includes retry logic, circuit breaker, and timeouts.
+
+NOTE: All streaming functions are synchronous generators.
+They MUST be run via asyncio.to_thread() or run_in_executor()
+from async endpoints to avoid blocking the event loop.
 """
 
 import os
@@ -82,6 +86,77 @@ DEFAULT_MODEL = os.environ.get("LLM_MODEL", "gemini-2.0-flash")
 
 def get_circuit_stats() -> dict:
     return _circuit.stats()
+
+
+# ── Async wrappers for sync generators ──
+# Sync generators block the event loop. These wrappers run them in a thread
+# and yield chunks back to the async caller without blocking.
+
+import asyncio
+import queue as _queue
+
+_SENTINEL = object()
+
+
+async def async_call_llm_stream(prompt: str, content: str, model: str = DEFAULT_MODEL):
+    """Async generator wrapper around call_llm_stream. Safe for event loop."""
+    q: _queue.Queue = _queue.Queue(maxsize=64)
+
+    def _producer():
+        try:
+            for chunk in call_llm_stream(prompt, content, model):
+                q.put(chunk)
+            q.put(_SENTINEL)
+        except Exception as exc:
+            q.put(exc)
+
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(None, _producer)
+
+    while True:
+        # Non-blocking poll so we don't starve the event loop
+        while True:
+            try:
+                item = q.get_nowait()
+                break
+            except _queue.Empty:
+                await asyncio.sleep(0.01)
+                continue
+        if item is _SENTINEL:
+            return
+        if isinstance(item, Exception):
+            raise item
+        yield item
+
+
+async def async_call_llm_stream_messages(messages: list, model: str = DEFAULT_MODEL):
+    """Async generator wrapper around call_llm_stream_messages. Safe for event loop."""
+    q: _queue.Queue = _queue.Queue(maxsize=64)
+
+    def _producer():
+        try:
+            for chunk in call_llm_stream_messages(messages, model):
+                q.put(chunk)
+            q.put(_SENTINEL)
+        except Exception as exc:
+            q.put(exc)
+
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(None, _producer)
+
+    while True:
+        while True:
+            try:
+                item = q.get_nowait()
+                break
+            except _queue.Empty:
+                await asyncio.sleep(0.01)
+                continue
+        if item is _SENTINEL:
+            return
+        if isinstance(item, Exception):
+            raise item
+        yield item
 
 
 def _get_client():
