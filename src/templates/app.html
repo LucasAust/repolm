@@ -907,6 +907,12 @@ function repolm() {
         busyRetryCount: 0,
 
         init() {
+            // Force full reload when restored from bfcache (back/forward navigation).
+            // Without this, Alpine state is stale (dead intervals, old repoId, broken connections).
+            window.addEventListener('pageshow', (e) => {
+                if (e.persisted) window.location.reload();
+            });
+
             // Start server health polling
             this._healthInterval = setInterval(() => this.checkServerHealth(), 30000);
             this.checkServerHealth();
