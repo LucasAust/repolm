@@ -1,6 +1,6 @@
 """
-RepoLM — Shared state: in-memory stores with TTL, SQLite-backed repo cache,
-LRU eviction, and disk cleanup.
+RepoLM — Shared state: in-memory stores with TTL, Redis-backed when available,
+SQLite-backed repo cache as cold storage, LRU eviction, and disk cleanup.
 """
 
 import asyncio
@@ -149,6 +149,19 @@ def cache_repo_to_db(repo_id: str, repo_data: dict):
         )
         conn.commit()
         conn.close()
+
+        # Also cache to Redis if available
+        try:
+            import redis_client
+            if redis_client.is_available():
+                import asyncio as _aio
+                try:
+                    loop = _aio.get_running_loop()
+                    loop.create_task(redis_client.cache_repo(repo_id, repo_data))
+                except RuntimeError:
+                    pass  # no event loop, skip Redis
+        except ImportError:
+            pass
     except Exception:
         logger.exception("Failed to cache repo %s to DB", repo_id)
 
@@ -179,10 +192,13 @@ def load_repo_from_db(repo_id: str) -> Optional[dict]:
 
 
 def get_repo_with_fallback(repo_id: str) -> Optional[dict]:
-    """Try memory first, then SQLite DB. Load into memory if found in DB."""
+    """Try memory first, then SQLite cold storage. Redis is handled in db_async."""
+    # 1. In-memory
     repo = repos.get(repo_id)
     if repo:
         return repo
+
+    # 2. SQLite cold storage
     db_repo = load_repo_from_db(repo_id)
     if db_repo and db_repo["status"] == "ready":
         repos.set(repo_id, db_repo)

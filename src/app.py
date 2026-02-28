@@ -56,11 +56,59 @@ REQUEST_TIMEOUT = 300  # 5 minutes
 async def lifespan(app: FastAPI):
     validate_config()
     logger.info("RepoLM %s starting | DB: %s | PID: %d", APP_VERSION, database.DB_PATH, os.getpid())
+
+    # Initialize PostgreSQL pool if DATABASE_URL is set
+    if os.environ.get("DATABASE_URL"):
+        try:
+            import db_postgres
+            await db_postgres.init_pool()
+            logger.info("PostgreSQL backend initialized")
+        except Exception:
+            logger.exception("Failed to initialize PostgreSQL — falling back to SQLite")
+
+    # Initialize Redis if REDIS_URL is set
+    try:
+        import redis_client
+        await redis_client.init_redis()
+    except Exception:
+        logger.exception("Failed to initialize Redis — continuing without cache")
+
     cleanup_task = asyncio.create_task(state.cleanup_stores())
     yield
     logger.info("RepoLM shutting down gracefully...")
     cleanup_task.cancel()
     concurrency.shutdown_pools()
+
+    # Close Postgres pool
+    if os.environ.get("DATABASE_URL"):
+        try:
+            import db_postgres
+            await db_postgres.close_pool()
+        except Exception:
+            pass
+
+    # Close Redis
+    try:
+        import redis_client
+        await redis_client.close_redis()
+    except Exception:
+        pass
+
+    # Close PostgreSQL pool
+    if os.environ.get("DATABASE_URL"):
+        try:
+            import db_postgres
+            await db_postgres.close_pool()
+        except Exception:
+            pass
+
+    # Close Redis
+    try:
+        import redis_client
+        await redis_client.close_redis()
+    except Exception:
+        pass
+
     try:
         await cleanup_task
     except asyncio.CancelledError:
