@@ -236,7 +236,18 @@ async def health():
         db_ok = False
 
     pools = concurrency.get_pool_status()
-    disk = state.get_disk_usage()
+
+    # NOTE: disk usage check moved to async to avoid blocking the event loop.
+    # _dir_size() does os.walk() which is synchronous I/O and can block for
+    # seconds on slow filesystems (Railway volumes), freezing ALL requests.
+    import asyncio
+    try:
+        disk = await asyncio.wait_for(
+            asyncio.get_event_loop().run_in_executor(None, state.get_disk_usage),
+            timeout=2.0,
+        )
+    except (asyncio.TimeoutError, Exception):
+        disk = {"output_dir_bytes": 0, "repo_cache_db_bytes": 0, "total_bytes": 0, "alert": False, "max_bytes": 0}
 
     from services.llm import get_circuit_stats
     circuit = get_circuit_stats()

@@ -312,9 +312,11 @@ async def cleanup_stores():
         except Exception:
             pass
         # Disk cleanup every 30 min (every 3 cycles)
+        # Run in executor to avoid blocking the event loop (os.walk + shutil.rmtree)
         if cycle % 3 == 0:
             try:
-                cleanup_disk()
+                import asyncio as _aio
+                await _aio.get_event_loop().run_in_executor(None, cleanup_disk)
             except Exception:
                 logger.exception("Disk cleanup failed")
         if total:
