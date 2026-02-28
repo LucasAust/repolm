@@ -145,13 +145,29 @@ async def add_repo(request: Request):
     if await check_rate_limit(request, "repo"):
         return JSONResponse({"error": "Rate limit exceeded (5 repos/hour). Set REPOLM_API_KEY to bypass."}, 429)
     body = await request.json()
-    url = body.get("url", "").strip()
+    url = body.get("url", "").strip().rstrip("/")
     if not url:
         return JSONResponse({"error": "URL required"}, 400)
-    if not url.startswith("http"):
+
+    # Accept owner/repo shorthand
+    import re
+    shorthand = re.match(r'^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$', url)
+    if shorthand:
         url = "https://github.com/" + url
-    if "github.com" not in url and "gitlab.com" not in url:
-        return JSONResponse({"error": "Please provide a valid GitHub or GitLab URL"}, 400)
+    elif not url.startswith("http"):
+        return JSONResponse({"error": "Please provide a valid GitHub URL (e.g. https://github.com/owner/repo)"}, 400)
+
+    # Strict validation: must be github.com/owner/repo (optionally with trailing path)
+    gh_pattern = re.compile(
+        r'^https?://(www\.)?github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(/.*)?$'
+    )
+    if not gh_pattern.match(url):
+        return JSONResponse({"error": "Only GitHub repository URLs are supported (e.g. https://github.com/owner/repo)"}, 400)
+
+    # Normalize to just owner/repo (strip tree/blob paths, .git suffix, query strings)
+    url = url.split("?")[0].split("#")[0]
+    url = re.sub(r'\.git$', '', url)
+    url = re.sub(r'/(tree|blob|pull|issues|compare|commit|releases|actions|wiki)/.*$', '', url)
 
     # Check URL-based cache first (skip re-clone for recently ingested repos)
     cached_id = await db_async.find_cached_repo_by_url(url)

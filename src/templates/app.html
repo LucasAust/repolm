@@ -1245,9 +1245,21 @@ function repolm() {
         },
 
         async loadRepo() {
-            let url = this.urlInput.trim();
+            let url = this.urlInput.trim().replace(/\/+$/, '');
             if (!url) return;
-            if (!url.startsWith('http')) url = 'https://github.com/' + url;
+
+            // Validate: must look like a GitHub repo URL or owner/repo shorthand
+            const shorthand = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(url);
+            if (shorthand) {
+                url = 'https://github.com/' + url;
+            } else if (!url.startsWith('http')) {
+                this.repoError = 'Please enter a GitHub repo URL (e.g. https://github.com/owner/repo)';
+                return;
+            }
+            if (!/^https?:\/\/(www\.)?github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(\/.*)?$/.test(url)) {
+                this.repoError = 'Only GitHub repository URLs are supported';
+                return;
+            }
             this.loadingRepo = true;
             this.repoError = null;
             try {
