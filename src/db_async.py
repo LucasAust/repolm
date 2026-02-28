@@ -27,10 +27,14 @@ import db as _sync
 import state as _state
 
 
+from concurrent.futures import ThreadPoolExecutor
+_db_pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="db-async")
+
+
 async def _run(fn, *args, **kwargs):
-    """Run a sync function in the default executor (thread pool)."""
+    """Run a sync function in a dedicated DB thread pool (never starved by LLM/other I/O)."""
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, partial(fn, *args, **kwargs))
+    return await loop.run_in_executor(_db_pool, partial(fn, *args, **kwargs))
 
 
 # ── Auth / Sessions ──

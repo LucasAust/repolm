@@ -294,7 +294,8 @@ async def health():
         return pools, disk, circuit
 
     try:
-        pools, disk, circuit = await asyncio.wait_for(loop.run_in_executor(None, _sync_health), timeout=3.0)
+        from db_async import _db_pool
+        pools, disk, circuit = await asyncio.wait_for(loop.run_in_executor(_db_pool, _sync_health), timeout=3.0)
     except asyncio.TimeoutError:
         return {"status": "ok", "version": APP_VERSION, "uptime": round(time.time() - _start_time, 1), "pressure": "low"}
 
