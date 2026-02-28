@@ -228,63 +228,66 @@ async def global_exception_handler(request: Request, exc: Exception):
 # ── Health Endpoints ──
 @app.get("/health")
 async def health():
-    try:
-        with database.db() as conn:
-            conn.execute("SELECT 1").fetchone()
-        db_ok = True
-    except Exception:
-        db_ok = False
-
-    pools = concurrency.get_pool_status()
-
-    # NOTE: disk usage check moved to async to avoid blocking the event loop.
-    # _dir_size() does os.walk() which is synchronous I/O and can block for
-    # seconds on slow filesystems (Railway volumes), freezing ALL requests.
+    """Lightweight health check — NO blocking I/O on the event loop.
+    All sync operations (DB, disk) run in a thread pool executor."""
     import asyncio
+    loop = asyncio.get_running_loop()
+
+    # Run ALL sync I/O in executor to never block the event loop
+    def _sync_health():
+        try:
+            with database.db() as conn:
+                conn.execute("SELECT 1").fetchone()
+            db_ok = True
+        except Exception:
+            db_ok = False
+
+        pools = concurrency.get_pool_status()
+        disk = state.get_disk_usage()
+
+        from services.llm import get_circuit_stats
+        circuit = get_circuit_stats()
+
+        max_util = max(pools["ingest"]["utilization"], pools["generate"]["utilization"], pools["audio"]["utilization"])
+        pressure = "low"
+        if max_util > 0.5:
+            pressure = "medium"
+        if max_util > 0.8:
+            pressure = "high"
+
+        status = "ok"
+        if not db_ok or circuit["circuit_open"]:
+            status = "degraded"
+        if disk.get("alert"):
+            status = "degraded"
+
+        return {
+            "status": status,
+            "version": APP_VERSION,
+            "uptime": round(time.time() - _start_time, 1),
+            "db": "ok" if db_ok else "error",
+            "pools": pools,
+            "disk": disk,
+            "circuit_breaker": circuit,
+            "pressure": pressure,
+        }
+
     try:
-        disk = await asyncio.wait_for(
-            asyncio.get_event_loop().run_in_executor(None, state.get_disk_usage),
-            timeout=2.0,
-        )
-    except (asyncio.TimeoutError, Exception):
-        disk = {"output_dir_bytes": 0, "repo_cache_db_bytes": 0, "total_bytes": 0, "alert": False, "max_bytes": 0}
-
-    from services.llm import get_circuit_stats
-    circuit = get_circuit_stats()
-
-    # Determine overall status
-    status = "ok"
-    if not db_ok or circuit["circuit_open"]:
-        status = "degraded"
-    if disk.get("alert"):
-        status = "degraded"
-
-    # Pressure level for frontend
-    max_util = max(pools["ingest"]["utilization"], pools["generate"]["utilization"], pools["audio"]["utilization"])
-    pressure = "low"
-    if max_util > 0.5:
-        pressure = "medium"
-    if max_util > 0.8:
-        pressure = "high"
-
-    return {
-        "status": status,
-        "version": APP_VERSION,
-        "uptime": round(time.time() - _start_time, 1),
-        "db": "ok" if db_ok else "error",
-        "pools": pools,
-        "disk": disk,
-        "circuit_breaker": circuit,
-        "pressure": pressure,
-    }
+        return await asyncio.wait_for(loop.run_in_executor(None, _sync_health), timeout=3.0)
+    except asyncio.TimeoutError:
+        return {"status": "ok", "version": APP_VERSION, "uptime": round(time.time() - _start_time, 1), "pressure": "low"}
 
 
 @app.get("/ready")
 async def ready():
-    try:
+    import asyncio
+    def _check():
         with database.db() as conn:
             conn.execute("CREATE TABLE IF NOT EXISTS _health_check (id INTEGER)")
             conn.execute("SELECT 1").fetchone()
+        return True
+    try:
+        await asyncio.wait_for(asyncio.get_running_loop().run_in_executor(None, _check), timeout=3.0)
         return {"status": "ready"}
     except Exception as e:
         return JSONResponse({"status": "not_ready", "error": str(e)}, 503)
