@@ -1715,12 +1715,14 @@ function repolm() {
         downloadContent() {
             let content, filename;
             if (this.viewingGenerated) {
-                content = this.viewingContent;
-                filename = (this.repoData.name || 'repo') + '_' + this.viewingGenerated.kind + '.md';
+                content = this.viewingContent || '';
+                const repoName = (this.repoData && this.repoData.name) || this.urlInput.split('/').pop() || 'repo';
+                filename = repoName + '_' + this.viewingGenerated.kind + '.md';
             } else {
-                content = this.fileContent;
+                content = this.fileContent || '';
                 filename = (this.currentFile || 'file').split('/').pop();
             }
+            if (!content) { alert('Nothing to download'); return; }
             const blob = new Blob([content], {type:'text/markdown'});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
