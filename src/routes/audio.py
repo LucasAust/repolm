@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse, FileResponse
 from config import TOKEN_COSTS
 from auth import get_current_user
 import db as database
+import db_async
 import state
 from concurrency import audio_queue
 from services.audio_gen import generate_podcast_audio
@@ -23,7 +24,7 @@ logger = logging.getLogger("repolm")
 
 
 def run_audio_gen(audio_id, script_text):
-    """Background worker: generate podcast audio."""
+    """Background worker: generate podcast audio. Runs in thread pool (sync is fine)."""
     database.update_job(audio_id, status="generating")
     try:
         path = generate_podcast_audio(script_text, audio_id)
@@ -36,19 +37,19 @@ def run_audio_gen(audio_id, script_text):
 
 @router.post("/api/podcast-audio")
 async def podcast_audio(request: Request):
-    user = get_current_user(request)
+    user = await get_current_user(request)
     cost = TOKEN_COSTS["audio"]
     if user:
-        balance = database.get_token_balance(user["id"])
+        balance = await db_async.get_token_balance(user["id"])
         if balance < cost:
             return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
-        database.spend_tokens(user["id"], cost, "Podcast audio generation")
+        await db_async.spend_tokens(user["id"], cost, "Podcast audio generation")
     body = await request.json()
     script = body.get("script", "")
     if not script:
         return JSONResponse({"error": "Script required"}, 400)
     audio_id = str(uuid.uuid4())[:8]
-    database.create_job(audio_id, kind="audio", status="queued", message="")
+    await db_async.create_job(audio_id, kind="audio", status="queued", message="")
     state.audio_jobs.set(audio_id, {"status": "queued", "path": None, "message": "", "progress": None, "total": 0, "started_at": None})
 
     status, queue_pos = audio_queue.submit(audio_id, run_audio_gen, audio_id, script)
@@ -68,14 +69,13 @@ async def get_podcast_audio(audio_id: str):
     if mem_job and mem_job["status"] == "done" and mem_job.get("path"):
         return {"status": "done", "url": "/api/podcast-audio/{}/file".format(audio_id)}
 
-    job = database.get_job(audio_id)
+    job = await db_async.get_job(audio_id)
     if not job:
         return JSONResponse({"error": "Not found"}, 404)
     if job["status"] == "done" and job.get("result"):
         return {"status": "done", "url": "/api/podcast-audio/{}/file".format(audio_id)}
     result = {"status": job["status"], "message": job.get("message", "")}
 
-    # Queue position
     pos = audio_queue.get_position(audio_id)
     if pos is not None:
         result["queue_position"] = pos
@@ -97,7 +97,7 @@ async def get_podcast_audio_file(audio_id: str):
     mem_job = state.audio_jobs.get(audio_id)
     if mem_job and mem_job.get("path"):
         return FileResponse(mem_job["path"], media_type="audio/mpeg", filename="podcast.mp3")
-    job = database.get_job(audio_id)
+    job = await db_async.get_job(audio_id)
     if job and job.get("result"):
         return FileResponse(job["result"], media_type="audio/mpeg", filename="podcast.mp3")
     return JSONResponse({"error": "Not found"}, 404)

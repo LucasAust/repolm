@@ -11,7 +11,7 @@ from starlette.responses import StreamingResponse
 
 from config import TOKEN_COSTS
 from auth import get_current_user
-import db as database
+import db_async
 import state
 from services.concept_gen import generate_concept_repo_stream, parse_generated_repo
 from routes._helpers import sse_format
@@ -24,11 +24,11 @@ router = APIRouter()
 @router.post("/api/concept-lab")
 async def concept_lab(request: Request):
     """Generate a teaching repo from a concept description. Costs 50 tokens."""
-    user = get_current_user(request)
+    user = await get_current_user(request)
     if not user:
         return JSONResponse({"error": "Sign in to use Concept Lab"}, 401)
     cost = TOKEN_COSTS["concept_lab"]
-    balance = database.get_token_balance(user["id"])
+    balance = await db_async.get_token_balance(user["id"])
     if balance < cost:
         return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
 
@@ -39,7 +39,7 @@ async def concept_lab(request: Request):
     if not concept:
         return JSONResponse({"error": "Concept description required"}, 400)
 
-    database.spend_tokens(user["id"], cost, f"Concept Lab: {concept[:50]}")
+    await db_async.spend_tokens(user["id"], cost, f"Concept Lab: {concept[:50]}")
 
     async def event_stream():
         full_text = ""

@@ -9,7 +9,7 @@ import time
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, Response
 
-import db as database
+import db_async
 
 router = APIRouter()
 
@@ -19,7 +19,7 @@ BASE_URL = "https://repolm.com"
 @router.get("/repo/{owner}/{name}", response_class=HTMLResponse)
 async def public_repo_page(owner: str, name: str):
     """SEO-optimized public page for a repo overview."""
-    overview = database.get_public_overview(owner, name)
+    overview = await db_async.get_public_overview(owner, name)
     if not overview:
         return HTMLResponse(
             """<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Not Found | RepoLM</title>
@@ -137,7 +137,7 @@ document.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
 @router.get("/sitemap.xml")
 async def sitemap():
     """Generate sitemap.xml with all public repo pages."""
-    pages = database.list_public_overviews(limit=5000)
+    pages = await db_async.list_public_overviews(limit=5000)
     urls = [f"""  <url>
     <loc>{BASE_URL}/repo/{p['owner']}/{p['repo_name']}</loc>
     <lastmod>{time.strftime('%Y-%m-%d', time.gmtime(p.get('updated_at', time.time())))}</lastmod>
@@ -145,7 +145,6 @@ async def sitemap():
     <priority>0.7</priority>
   </url>""" for p in pages]
 
-    # Static pages
     static = [
         ("", "daily", "1.0"),
         ("/app", "daily", "0.9"),
@@ -185,7 +184,7 @@ Sitemap: {BASE_URL}/sitemap.xml
 @router.get("/api/og-image/{owner}/{name}")
 async def og_image(owner: str, name: str):
     """Generate a simple SVG-based OG image for social sharing."""
-    overview = database.get_public_overview(owner, name)
+    overview = await db_async.get_public_overview(owner, name)
     desc = ""
     if overview:
         desc = re.sub(r'[#*`\[\]()]', '', overview["overview"])[:120].replace('\n', ' ').strip()
@@ -221,7 +220,7 @@ SEED_TRENDING = [
 @router.get("/api/trending")
 async def trending_repos():
     """Get trending repos for the landing page."""
-    repos = database.get_trending_repos(days=7, limit=8)
+    repos = await db_async.get_trending_repos(days=7, limit=8)
     if not repos:
         return SEED_TRENDING
     return repos

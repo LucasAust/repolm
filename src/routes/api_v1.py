@@ -10,7 +10,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
 from pathlib import Path
 
-import db as database
+import db_async
 import state
 from config import TOKEN_COSTS, TIER_RATE_LIMITS
 from routes.repo import run_ingest
@@ -22,31 +22,31 @@ router = APIRouter(prefix="/api/v1")
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 
 
-def _get_api_user(request: Request):
+async def _get_api_user(request: Request):
     """Extract and validate API key from request. Returns (user, error_response)."""
     api_key = request.headers.get("x-api-key", "")
     if not api_key:
         return None, JSONResponse({"error": "Missing X-API-Key header"}, 401)
-    user = database.get_user_by_api_key(api_key)
+    user = await db_async.get_user_by_api_key(api_key)
     if not user:
         return None, JSONResponse({"error": "Invalid API key"}, 401)
-    sub = database.get_subscription(user["id"])
+    sub = await db_async.get_subscription(user["id"])
     plan = "free"
     if sub and sub.get("subscription_status") == "active":
         plan = sub.get("plan", "free")
     tier = TIER_RATE_LIMITS.get(plan, TIER_RATE_LIMITS["free"])
     daily_limit = tier.get("api_calls_per_day", 10)
-    if not database.check_api_rate_limit(user["id"], daily_limit):
+    if not await db_async.check_api_rate_limit(user["id"], daily_limit):
         return None, JSONResponse({"error": f"API rate limit exceeded ({daily_limit} calls/day for {plan} tier)"}, 429)
     analytics.track("api_call", user_id=user["id"], data={"endpoint": request.url.path})
-    database.track_api_usage(user["id"], api_key, request.url.path)
+    await db_async.track_api_usage(user["id"], api_key, request.url.path)
     return user, None
 
 
 @router.post("/repos")
 async def api_ingest_repo(request: Request):
     """Ingest a repository via API."""
-    user, err = _get_api_user(request)
+    user, err = await _get_api_user(request)
     if err:
         return err
     body = await request.json()
@@ -57,10 +57,10 @@ async def api_ingest_repo(request: Request):
         url = "https://github.com/" + url
 
     cost = TOKEN_COSTS["ingest"]
-    balance = database.get_token_balance(user["id"])
+    balance = await db_async.get_token_balance(user["id"])
     if balance < cost:
         return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
-    database.spend_tokens(user["id"], cost, "API: Ingest repo")
+    await db_async.spend_tokens(user["id"], cost, "API: Ingest repo")
 
     repo_id = str(uuid.uuid4())[:8]
     state.repos.set(repo_id, {"status": "queued", "message": "Starting...", "files": [], "text": "", "data": {}})
@@ -79,10 +79,10 @@ async def api_ingest_repo(request: Request):
 
 @router.get("/repos/{repo_id}")
 async def api_get_repo(repo_id: str, request: Request):
-    user, err = _get_api_user(request)
+    user, err = await _get_api_user(request)
     if err:
         return err
-    repo = state.get_repo_with_fallback(repo_id)
+    repo = await db_async.get_repo_with_fallback(repo_id)
     if not repo:
         return JSONResponse({"error": "Not found"}, 404)
     return {
@@ -95,7 +95,7 @@ async def api_get_repo(repo_id: str, request: Request):
 
 @router.post("/repos/{repo_id}/generate")
 async def api_generate(repo_id: str, request: Request):
-    user, err = _get_api_user(request)
+    user, err = await _get_api_user(request)
     if err:
         return err
     body = await request.json()
@@ -103,15 +103,15 @@ async def api_generate(repo_id: str, request: Request):
     depth = body.get("depth", "high-level")
     expertise = body.get("expertise", "amateur")
 
-    repo = state.get_repo_with_fallback(repo_id)
+    repo = await db_async.get_repo_with_fallback(repo_id)
     if not repo or repo["status"] != "ready":
         return JSONResponse({"error": "Repo not ready"}, 400)
 
     cost = TOKEN_COSTS.get(kind, 10)
-    balance = database.get_token_balance(user["id"])
+    balance = await db_async.get_token_balance(user["id"])
     if balance < cost:
         return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
-    database.spend_tokens(user["id"], cost, f"API: Generate {kind}")
+    await db_async.spend_tokens(user["id"], cost, f"API: Generate {kind}")
 
     from routes.generate import run_generate
     job_id = str(uuid.uuid4())[:8]
@@ -131,7 +131,7 @@ async def api_generate(repo_id: str, request: Request):
 
 @router.get("/jobs/{job_id}")
 async def api_get_job(job_id: str, request: Request):
-    user, err = _get_api_user(request)
+    user, err = await _get_api_user(request)
     if err:
         return err
     job = state.jobs.get(job_id)
@@ -142,7 +142,7 @@ async def api_get_job(job_id: str, request: Request):
 
 @router.get("/usage")
 async def api_usage(request: Request):
-    user, err = _get_api_user(request)
+    user, err = await _get_api_user(request)
     if err:
         return err
-    return database.get_api_usage_stats(user["id"])
+    return await db_async.get_api_usage_stats(user["id"])

@@ -17,6 +17,7 @@ from config import (
 )
 from auth import get_current_user
 import db as database
+import db_async
 import state
 import cache as content_cache
 from services.llm import call_llm, call_llm_stream, call_llm_stream_messages, async_call_llm_stream, async_call_llm_stream_messages
@@ -28,7 +29,7 @@ logger = logging.getLogger("repolm")
 
 
 def run_generate(job_id, repo_id, kind, depth, expertise):
-    """Background worker: generate content."""
+    """Background worker: generate content. Runs in thread pool (sync is fine)."""
     repo = state.get_repo_with_fallback(repo_id)
     if not repo or repo["status"] != "ready":
         database.update_job(job_id, status="error", message="Repo not ready")
@@ -62,14 +63,14 @@ async def generate(repo_id: str, request: Request):
     depth = body.get("depth", "high-level")
     expertise = body.get("expertise", "amateur")
     cost = TOKEN_COSTS.get(kind, 10)
-    user = get_current_user(request)
+    user = await get_current_user(request)
     if user:
-        balance = database.get_token_balance(user["id"])
+        balance = await db_async.get_token_balance(user["id"])
         if balance < cost:
             return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
-        database.spend_tokens(user["id"], cost, f"Generate {kind}")
+        await db_async.spend_tokens(user["id"], cost, f"Generate {kind}")
     job_id = str(uuid.uuid4())[:8]
-    database.create_job(job_id, kind="generate", repo_id=repo_id)
+    await db_async.create_job(job_id, kind="generate", repo_id=repo_id)
 
     status, queue_pos = generate_queue.submit(job_id, run_generate, job_id, repo_id, kind, depth, expertise)
     if status == "rejected":
@@ -84,11 +85,10 @@ async def generate(repo_id: str, request: Request):
 
 @router.get("/api/job/{job_id}")
 async def get_job(job_id: str):
-    job = database.get_job(job_id)
+    job = await db_async.get_job(job_id)
     if not job:
         return JSONResponse({"error": "Not found"}, 404)
     result = {"status": job["status"], "message": job["message"], "result": job["result"]}
-    # Check queue position
     for q in (generate_queue,):
         pos = q.get_position(job_id)
         if pos is not None:
@@ -106,30 +106,28 @@ async def generate_stream(repo_id: str, request: Request):
     expertise = body.get("expertise", "amateur")
 
     cost = TOKEN_COSTS.get(kind, 10)
-    user = get_current_user(request)
+    user = await get_current_user(request)
     is_free_anon = False
     if user:
-        balance = database.get_token_balance(user["id"])
+        balance = await db_async.get_token_balance(user["id"])
         if balance < cost:
             return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
-        database.spend_tokens(user["id"], cost, f"Generate {kind}")
+        await db_async.spend_tokens(user["id"], cost, f"Generate {kind}")
     else:
-        # Anonymous user: allow first overview free
         if kind == "overview":
             ip = request.client.host if request.client else "unknown"
-            used = database.check_anonymous_usage(ip)
+            used = await db_async.check_anonymous_usage(ip)
             if used >= 1:
                 return JSONResponse({"error": "Please sign up to continue. Your first overview was free!", "signup_required": True}, 401)
             is_free_anon = True
-            database.increment_anonymous_usage(ip)
+            await db_async.increment_anonymous_usage(ip)
         else:
             return JSONResponse({"error": "Please sign up to generate content"}, 401)
 
-    repo = state.get_repo_with_fallback(repo_id)
+    repo = await db_async.get_repo_with_fallback(repo_id)
     if not repo or repo["status"] != "ready":
         return JSONResponse({"error": "Repo not ready"}, 400)
 
-    # Per-IP SSE limit
     ip = request.client.host if request.client else "unknown"
     sse_ctx = acquire_sse(ip)
     if not sse_ctx:
@@ -170,7 +168,6 @@ async def generate_stream(repo_id: str, request: Request):
                         yield sse_format(chunk, "chunk")
                     if repo_url and full_content:
                         content_cache.set_cached(repo_url, kind, depth, expertise, full_content)
-                    # Auto-create public page for overview of public repos
                     if kind == "overview" and full_content and repo_url:
                         try:
                             import re
@@ -178,7 +175,7 @@ async def generate_stream(repo_id: str, request: Request):
                             if match:
                                 owner, rname = match.group(1), match.group(2).replace('.git', '')
                                 repo_data = repo.get("data", {})
-                                database.save_public_overview(
+                                await db_async.save_public_overview(
                                     owner=owner, repo_name=rname, repo_url=repo_url,
                                     overview=full_content,
                                     description=full_content[:200].replace('\n', ' '),
@@ -188,13 +185,12 @@ async def generate_stream(repo_id: str, request: Request):
                                 )
                         except Exception:
                             pass
-                    # Grant achievements
                     if user and full_content:
                         try:
                             badge_map = {"overview": "first_overview", "podcast": "podcast_pioneer", "slides": "slide_master"}
                             badge = badge_map.get(kind)
                             if badge:
-                                new = database.grant_achievement(user["id"], badge)
+                                new = await db_async.grant_achievement(user["id"], badge)
                                 if new:
                                     defn = database.ACHIEVEMENT_DEFS.get(badge, {})
                                     yield sse_format(json.dumps({"badge": badge, "name": defn.get("name", badge), "emoji": defn.get("emoji", "🏆")}), "achievement")
@@ -213,7 +209,7 @@ async def generate_stream(repo_id: str, request: Request):
 @router.post("/api/repo/{repo_id}/chat-stream")
 async def chat_stream(repo_id: str, request: Request):
     """SSE streaming endpoint for chat."""
-    if check_rate_limit(request, "chat"):
+    if await check_rate_limit(request, "chat"):
         return JSONResponse({"error": "Rate limit exceeded (20 chats/hour)."}, 429)
 
     body = await request.json()
@@ -222,21 +218,20 @@ async def chat_stream(repo_id: str, request: Request):
     expertise = body.get("expertise", "amateur")
     selection = body.get("selection")
     file_context = body.get("file_path")
-    repo = state.get_repo_with_fallback(repo_id)
+    repo = await db_async.get_repo_with_fallback(repo_id)
     if not repo or repo["status"] != "ready":
         return JSONResponse({"error": "Repo not ready"}, 400)
 
-    # Per-IP SSE limit
     ip = request.client.host if request.client else "unknown"
     sse_ctx = acquire_sse(ip)
     if not sse_ctx:
         return JSONResponse({"error": "Too many concurrent streams. Please close other tabs."}, 429)
 
-    user = get_current_user(request)
+    user = await get_current_user(request)
     is_immersive = bool(selection and file_context)
     cost = TOKEN_COSTS["immersive"] if is_immersive else TOKEN_COSTS["chat"]
     if user:
-        balance = database.get_token_balance(user["id"])
+        balance = await db_async.get_token_balance(user["id"])
         if balance < cost:
             sse_ctx.release()
             return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
@@ -278,8 +273,8 @@ async def chat_stream(repo_id: str, request: Request):
                 async for chunk in async_call_llm_stream_messages(messages_list):
                     yield sse_format(chunk, "chunk")
                 if user:
-                    database.spend_tokens(user["id"], cost, "Immersive question" if is_immersive else "Chat message")
-                new_balance = database.get_token_balance(user["id"]) if user else None
+                    await db_async.spend_tokens(user["id"], cost, "Immersive question" if is_immersive else "Chat message")
+                new_balance = await db_async.get_token_balance(user["id"]) if user else None
                 yield sse_format(json.dumps({"cost": cost, "balance": new_balance}), "meta")
                 yield sse_format("", "done")
         except Exception as e:
@@ -294,7 +289,7 @@ async def chat_stream(repo_id: str, request: Request):
 @router.post("/api/repo/{repo_id}/chat")
 async def chat(repo_id: str, request: Request):
     """Non-streaming chat endpoint (legacy)."""
-    if check_rate_limit(request, "chat"):
+    if await check_rate_limit(request, "chat"):
         return JSONResponse({"error": "Rate limit exceeded (20 chats/hour)."}, 429)
     body = await request.json()
     message = body.get("message", "")
@@ -302,14 +297,14 @@ async def chat(repo_id: str, request: Request):
     expertise = body.get("expertise", "amateur")
     selection = body.get("selection")
     file_context = body.get("file_path")
-    repo = state.get_repo_with_fallback(repo_id)
+    repo = await db_async.get_repo_with_fallback(repo_id)
     if not repo or repo["status"] != "ready":
         return JSONResponse({"error": "Repo not ready"}, 400)
-    user = get_current_user(request)
+    user = await get_current_user(request)
     is_immersive = bool(selection and file_context)
     cost = TOKEN_COSTS["immersive"] if is_immersive else TOKEN_COSTS["chat"]
     if user:
-        balance = database.get_token_balance(user["id"])
+        balance = await db_async.get_token_balance(user["id"])
         if balance < cost:
             return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
     if selection and file_context:
@@ -329,8 +324,8 @@ async def chat(repo_id: str, request: Request):
     try:
         result = call_llm(system, prompt)
         if user:
-            database.spend_tokens(user["id"], cost, "Immersive question" if is_immersive else "Chat message")
-        new_balance = database.get_token_balance(user["id"]) if user else None
+            await db_async.spend_tokens(user["id"], cost, "Immersive question" if is_immersive else "Chat message")
+        new_balance = await db_async.get_token_balance(user["id"]) if user else None
         return {"response": result, "token_cost": cost, "balance": new_balance}
     except Exception as e:
         return JSONResponse({"error": f"AI generation failed: {str(e)}"}, 500)

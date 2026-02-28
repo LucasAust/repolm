@@ -358,39 +358,43 @@ async def privacy_page():
 @app.get("/api/my/achievements")
 async def get_achievements(request: Request):
     from auth import get_current_user
-    user = get_current_user(request)
+    import db_async
+    user = await get_current_user(request)
     if not user:
         return JSONResponse({"error": "Not authenticated"}, 401)
-    achievements = database.get_user_achievements(user["id"])
+    achievements = await db_async.get_user_achievements(user["id"])
     return {"achievements": achievements}
 
 
 @app.get("/api/my/email-preferences")
 async def get_email_prefs(request: Request):
     from auth import get_current_user
-    user = get_current_user(request)
+    import db_async
+    user = await get_current_user(request)
     if not user:
         return JSONResponse({"error": "Not authenticated"}, 401)
-    return database.get_email_preferences(user["id"])
+    return await db_async.get_email_preferences(user["id"])
 
 
 @app.post("/api/my/email-preferences")
 async def update_email_prefs(request: Request):
     from auth import get_current_user
-    user = get_current_user(request)
+    import db_async
+    user = await get_current_user(request)
     if not user:
         return JSONResponse({"error": "Not authenticated"}, 401)
     body = await request.json()
-    database.update_email_preferences(user["id"], **body)
+    await db_async.update_email_preferences(user["id"], **body)
     return {"ok": True}
 
 
 @app.post("/api/share/track")
 async def track_share(request: Request):
     """Track a social share."""
+    import db_async
     body = await request.json()
     content_id = body.get("content_id", "")
     platform = body.get("platform", "link")
     if content_id:
-        database.increment_share_count(content_id, platform)
+        await db_async.increment_share_count(content_id, platform)
     return {"ok": True}

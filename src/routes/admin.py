@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse, HTMLResponse
 from config import API_KEY, ADMIN_API_KEY
 import cache as content_cache
 import analytics
-import db as database
+import db_async
 
 router = APIRouter()
 
@@ -38,7 +38,7 @@ async def admin_stats(request: Request):
     """Comprehensive admin stats from DB."""
     if _require_admin(request):
         return JSONResponse({"error": "Unauthorized"}, 401)
-    return database.get_admin_stats()
+    return await db_async.get_admin_stats()
 
 
 @router.get("/api/admin/cache-stats")

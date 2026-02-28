@@ -11,9 +11,8 @@ from typing import Optional
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, RedirectResponse
-from db import (create_session, get_user_by_session, delete_session,
-                get_subscription, get_token_balance, has_ever_purchased)
 import db as database
+import db_async
 
 router = APIRouter()
 SESSION_COOKIE = "repolm_session"
@@ -37,7 +36,8 @@ def _hash_password(password: str, salt: str = None) -> tuple:
     return pw_hash, salt
 
 
-def get_current_user(request: Request) -> Optional[dict]:
+async def get_current_user(request: Request) -> Optional[dict]:
+    """Async version — runs DB lookup in executor."""
     auth_header = request.headers.get("authorization", "")
     if auth_header.startswith("Bearer "):
         token = auth_header[7:]
@@ -45,14 +45,26 @@ def get_current_user(request: Request) -> Optional[dict]:
         token = request.cookies.get(SESSION_COOKIE)
     if not token:
         return None
-    return get_user_by_session(token)
+    return await db_async.get_user_by_session(token)
 
 
-def get_user_plan(request: Request) -> str:
-    user = get_current_user(request)
+def get_current_user_sync(request: Request) -> Optional[dict]:
+    """Sync version for use in non-async contexts (background threads)."""
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+    else:
+        token = request.cookies.get(SESSION_COOKIE)
+    if not token:
+        return None
+    return database.get_user_by_session(token)
+
+
+async def get_user_plan(request: Request) -> str:
+    user = await get_current_user(request)
     if not user:
         return "free"
-    sub = get_subscription(user["id"])
+    sub = await db_async.get_subscription(user["id"])
     if sub and sub.get("plan") == "pro" and sub.get("subscription_status") == "active":
         return "pro"
     return "free"
@@ -73,37 +85,44 @@ async def signup(request: Request):
         username = email.split("@")[0]
 
     # Check if email exists
-    with database.db() as conn:
-        existing = conn.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone()
-        if existing:
-            return JSONResponse({"error": "Account already exists. Try logging in."}, 409)
+    def _check_existing():
+        with database.db() as conn:
+            return conn.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone()
+
+    existing = await db_async.execute_raw(_check_existing)
+    if existing:
+        return JSONResponse({"error": "Account already exists. Try logging in."}, 409)
 
     pw_hash, salt = _hash_password(password)
 
     # Check for referral code
     ref_code = body.get("referral_code", "").strip()
-    referrer = database.get_user_by_referral(ref_code) if ref_code else None
+    referrer = await db_async.get_user_by_referral(ref_code) if ref_code else None
 
     signup_tokens = 10
     if referrer:
         signup_tokens = 15  # Extra 5 for referred users
 
-    with database.db() as conn:
-        cur = conn.execute(
-            "INSERT INTO users (username, email, password_hash, password_salt) VALUES (?,?,?,?)",
-            (username, email, pw_hash, salt)
-        )
-        user_id = cur.lastrowid
-        conn.execute("UPDATE users SET tokens = ? WHERE id=?", (signup_tokens, user_id))
-        conn.execute(
-            "INSERT INTO token_transactions (user_id, amount, action, description) VALUES (?,?,?,?)",
-            (user_id, signup_tokens, "bonus", "Welcome bonus" + (" (referral)" if referrer else ""))
-        )
+    def _create_user():
+        with database.db() as conn:
+            cur = conn.execute(
+                "INSERT INTO users (username, email, password_hash, password_salt) VALUES (?,?,?,?)",
+                (username, email, pw_hash, salt)
+            )
+            user_id = cur.lastrowid
+            conn.execute("UPDATE users SET tokens = ? WHERE id=?", (signup_tokens, user_id))
+            conn.execute(
+                "INSERT INTO token_transactions (user_id, amount, action, description) VALUES (?,?,?,?)",
+                (user_id, signup_tokens, "bonus", "Welcome bonus" + (" (referral)" if referrer else ""))
+            )
+            return user_id
+
+    user_id = await db_async.execute_raw(_create_user)
 
     # Handle referral rewards
     if referrer:
-        database.set_referred_by(user_id, referrer["id"])
-        database.add_tokens(referrer["id"], 5, f"Referral reward: {username} signed up")
+        await db_async.set_referred_by(user_id, referrer["id"])
+        await db_async.add_tokens(referrer["id"], 5, f"Referral reward: {username} signed up")
 
     # Send welcome email (async, fire-and-forget)
     try:
@@ -114,7 +133,7 @@ async def signup(request: Request):
     except Exception:
         pass
 
-    session_token = create_session(user_id)
+    session_token = await db_async.create_session(user_id)
     response = JSONResponse({"ok": True, "username": username})
     response.set_cookie(SESSION_COOKIE, session_token, **_cookie_kwargs(request))
     return response
@@ -129,10 +148,13 @@ async def login(request: Request):
     if not email or not password:
         return JSONResponse({"error": "Email and password required"}, 400)
 
-    with database.db() as conn:
-        row = conn.execute(
-            "SELECT id, username, password_hash, password_salt FROM users WHERE email=?", (email,)
-        ).fetchone()
+    def _lookup():
+        with database.db() as conn:
+            return conn.execute(
+                "SELECT id, username, password_hash, password_salt FROM users WHERE email=?", (email,)
+            ).fetchone()
+
+    row = await db_async.execute_raw(_lookup)
 
     if not row:
         return JSONResponse({"error": "Invalid email or password"}, 401)
@@ -141,7 +163,7 @@ async def login(request: Request):
     if not hmac.compare_digest(pw_hash, row["password_hash"]):
         return JSONResponse({"error": "Invalid email or password"}, 401)
 
-    session_token = create_session(row["id"])
+    session_token = await db_async.create_session(row["id"])
     response = JSONResponse({"ok": True, "username": row["username"]})
     response.set_cookie(SESSION_COOKIE, session_token, **_cookie_kwargs(request))
     return response
@@ -151,7 +173,7 @@ async def login(request: Request):
 async def logout(request: Request):
     token = request.cookies.get(SESSION_COOKIE)
     if token:
-        delete_session(token)
+        await db_async.delete_session(token)
     response = RedirectResponse("/")
     response.delete_cookie(SESSION_COOKIE)
     return response
@@ -159,15 +181,15 @@ async def logout(request: Request):
 
 @router.get("/auth/me")
 async def me(request: Request):
-    user = get_current_user(request)
+    user = await get_current_user(request)
     if not user:
         return {"user": None}
-    sub = get_subscription(user["id"])
+    sub = await db_async.get_subscription(user["id"])
     plan = "free"
     if sub and sub.get("plan") == "pro" and sub.get("subscription_status") == "active":
         plan = "pro"
-    tokens = get_token_balance(user["id"])
-    purchased = has_ever_purchased(user["id"])
+    tokens = await db_async.get_token_balance(user["id"])
+    purchased = await db_async.has_ever_purchased(user["id"])
     return {"user": {"id": user["id"], "username": user["username"],
                      "email": user.get("email", ""), "plan": plan,
                      "tokens": tokens, "has_purchased": purchased}}
@@ -176,7 +198,7 @@ async def me(request: Request):
 @router.get("/auth/token")
 async def get_token(request: Request):
     token = request.cookies.get(SESSION_COOKIE)
-    user = get_current_user(request)
+    user = await get_current_user(request)
     if not user or not token:
         return JSONResponse({"error": "Not authenticated"}, 401)
     return {"token": token}

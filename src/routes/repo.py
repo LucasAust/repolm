@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from config import TOKEN_COSTS
 from auth import get_current_user
 import db as database
+import db_async
 import state
 from concurrency import ingest_queue, acquire_ingest
 from routes._helpers import check_rate_limit
@@ -26,7 +27,7 @@ logger = logging.getLogger("repolm")
 
 
 def run_ingest(repo_id, url):
-    """Background worker: clone and process a repo."""
+    """Background worker: clone and process a repo. Runs in thread pool (sync is fine)."""
     try:
         def _progress(status, message):
             try:
@@ -49,7 +50,6 @@ def run_ingest(repo_id, url):
             "data": repo_data, "files": file_list, "text": text,
         }
         state.repos.set(repo_id, repo_entry)
-        # Persist to SQLite for cross-worker access
         state.cache_repo_to_db(repo_id, repo_entry)
         database.update_job(repo_id, status="ready", message="Ready",
                            result=json.dumps(repo_data))
@@ -59,7 +59,7 @@ def run_ingest(repo_id, url):
 
 
 def run_upload_ingest(repo_id, files_data):
-    """Process uploaded folder files."""
+    """Process uploaded folder files. Runs in thread pool (sync is fine)."""
     from ingest import RepoFile, RepoData
     try:
         database.update_job(repo_id, status="processing", message="Processing uploaded files...")
@@ -143,7 +143,7 @@ def run_upload_ingest(repo_id, files_data):
 
 @router.post("/api/repo")
 async def add_repo(request: Request):
-    if check_rate_limit(request, "repo"):
+    if await check_rate_limit(request, "repo"):
         return JSONResponse({"error": "Rate limit exceeded (5 repos/hour). Set REPOLM_API_KEY to bypass."}, 429)
     body = await request.json()
     url = body.get("url", "").strip()
@@ -155,9 +155,9 @@ async def add_repo(request: Request):
         return JSONResponse({"error": "Please provide a valid GitHub or GitLab URL"}, 400)
 
     # Check URL-based cache first (skip re-clone for recently ingested repos)
-    cached_id = state.find_cached_repo_by_url(url)
+    cached_id = await db_async.find_cached_repo_by_url(url)
     if cached_id:
-        cached_repo = state.get_repo_with_fallback(cached_id)
+        cached_repo = await db_async.get_repo_with_fallback(cached_id)
         if cached_repo and cached_repo.get("status") == "ready":
             logger.info("Cache hit for %s -> %s", url, cached_id)
             return {"repo_id": cached_id, "token_cost": 0, "cached": True}
@@ -168,17 +168,17 @@ async def add_repo(request: Request):
     if not ip_ctx:
         return JSONResponse({"error": "Too many concurrent ingestions. Please wait."}, 429)
 
-    user = get_current_user(request)
+    user = await get_current_user(request)
     cost = TOKEN_COSTS["ingest"]
     if user:
-        balance = database.get_token_balance(user["id"])
+        balance = await db_async.get_token_balance(user["id"])
         if balance < cost:
             ip_ctx.release()
             return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
-        database.spend_tokens(user["id"], cost, "Ingest repo")
+        await db_async.spend_tokens(user["id"], cost, "Ingest repo")
 
     repo_id = str(uuid.uuid4())[:8]
-    database.create_job(repo_id, kind="ingest", repo_id=repo_id)
+    await db_async.create_job(repo_id, kind="ingest", repo_id=repo_id)
     state.repos.set(repo_id, {"status": "queued", "message": "Starting...", "files": [], "text": "", "data": {}})
 
     def _ingest_with_release():
@@ -202,7 +202,7 @@ async def add_repo(request: Request):
 @router.post("/api/upload")
 async def upload_folder(request: Request):
     """Handle folder upload via multipart form."""
-    if check_rate_limit(request, "repo"):
+    if await check_rate_limit(request, "repo"):
         return JSONResponse({"error": "Rate limit exceeded."}, 429)
 
     form = await request.form()
@@ -217,16 +217,16 @@ async def upload_folder(request: Request):
     if not files_data:
         return JSONResponse({"error": "No files uploaded"}, 400)
 
-    user = get_current_user(request)
+    user = await get_current_user(request)
     cost = TOKEN_COSTS["ingest"]
     if user:
-        balance = database.get_token_balance(user["id"])
+        balance = await db_async.get_token_balance(user["id"])
         if balance < cost:
             return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
-        database.spend_tokens(user["id"], cost, "Upload folder")
+        await db_async.spend_tokens(user["id"], cost, "Upload folder")
 
     repo_id = str(uuid.uuid4())[:8]
-    database.create_job(repo_id, kind="upload", repo_id=repo_id)
+    await db_async.create_job(repo_id, kind="upload", repo_id=repo_id)
     state.repos.set(repo_id, {"status": "queued", "message": "Processing upload...", "files": [], "text": "", "data": {}})
 
     status, queue_pos = ingest_queue.submit(repo_id, run_upload_ingest, repo_id, files_data)
@@ -243,16 +243,15 @@ async def upload_folder(request: Request):
 @router.get("/api/repo/{repo_id}")
 async def get_repo(repo_id: str):
     # Try memory + DB fallback
-    repo = state.get_repo_with_fallback(repo_id)
+    repo = await db_async.get_repo_with_fallback(repo_id)
     if repo:
         result = {"status": repo["status"], "message": repo["message"], "data": repo.get("data", {}), "file_count": len(repo.get("files", []))}
-        # Add queue position if applicable
         pos = ingest_queue.get_position(repo_id)
         if pos is not None:
             result["queue_position"] = pos
         return result
     # Fallback to jobs DB
-    job = database.get_job(repo_id)
+    job = await db_async.get_job(repo_id)
     if not job:
         return JSONResponse({"error": "Not found"}, 404)
     data = {}
@@ -266,7 +265,7 @@ async def get_repo(repo_id: str):
 
 @router.get("/api/repo/{repo_id}/files")
 async def get_files(repo_id: str):
-    repo = state.get_repo_with_fallback(repo_id)
+    repo = await db_async.get_repo_with_fallback(repo_id)
     if not repo:
         return JSONResponse({"error": "Not found"}, 404)
     return [{"path": f["path"], "size": f["size"], "is_priority": f["is_priority"]} for f in repo.get("files", [])]
@@ -274,7 +273,7 @@ async def get_files(repo_id: str):
 
 @router.get("/api/repo/{repo_id}/file")
 async def get_file(repo_id: str, path: str):
-    repo = state.get_repo_with_fallback(repo_id)
+    repo = await db_async.get_repo_with_fallback(repo_id)
     if not repo:
         return JSONResponse({"error": "Not found"}, 404)
     for f in repo.get("files", []):
@@ -287,10 +286,10 @@ async def get_file(repo_id: str, path: str):
 
 @router.get("/api/my/repos")
 async def my_repos(request: Request):
-    user = get_current_user(request)
+    user = await get_current_user(request)
     if not user:
         return JSONResponse({"error": "Not authenticated"}, 401)
-    repos_list = database.get_user_repos(user["id"])
+    repos_list = await db_async.get_user_repos(user["id"])
     for r in repos_list:
         r["languages"] = json.loads(r["languages"]) if r.get("languages") else {}
     return repos_list
@@ -298,15 +297,15 @@ async def my_repos(request: Request):
 
 @router.post("/api/my/repos/{repo_id}/save")
 async def save_repo_to_account(repo_id: str, request: Request):
-    user = get_current_user(request)
+    user = await get_current_user(request)
     if not user:
         return JSONResponse({"error": "Not authenticated"}, 401)
-    repo = state.get_repo_with_fallback(repo_id)
+    repo = await db_async.get_repo_with_fallback(repo_id)
     if not repo or repo["status"] != "ready":
         return JSONResponse({"error": "Repo not ready"}, 400)
     data = repo["data"]
     file_index = [{"path": f["path"], "size": f["size"], "is_priority": f["is_priority"]} for f in repo["files"]]
-    db_id = database.save_repo(
+    db_id = await db_async.save_repo(
         user_id=user["id"], url=data["url"], name=data["name"], tree=data.get("tree", ""),
         file_count=data["file_count"], total_chars=data["total_chars"],
         languages=data["languages"], repo_text=repo["text"], file_index=file_index
@@ -316,10 +315,10 @@ async def save_repo_to_account(repo_id: str, request: Request):
 
 @router.get("/api/my/repos/{db_id}")
 async def get_saved_repo(db_id: int, request: Request):
-    user = get_current_user(request)
+    user = await get_current_user(request)
     if not user:
         return JSONResponse({"error": "Not authenticated"}, 401)
-    saved = database.get_repo(db_id, user["id"])
+    saved = await db_async.get_repo(db_id, user["id"])
     if not saved:
         return JSONResponse({"error": "Not found"}, 404)
     repo_id = str(uuid.uuid4())[:8]
@@ -336,44 +335,44 @@ async def get_saved_repo(db_id: int, request: Request):
 
 @router.delete("/api/my/repos/{db_id}")
 async def delete_saved_repo(db_id: int, request: Request):
-    user = get_current_user(request)
+    user = await get_current_user(request)
     if not user:
         return JSONResponse({"error": "Not authenticated"}, 401)
-    database.delete_repo(db_id, user["id"])
+    await db_async.delete_repo(db_id, user["id"])
     return {"ok": True}
 
 
 @router.post("/api/my/repos/{db_id}/generated")
 async def save_generated_content(db_id: int, request: Request):
-    user = get_current_user(request)
+    user = await get_current_user(request)
     if not user:
         return JSONResponse({"error": "Not authenticated"}, 401)
     body = await request.json()
-    database.save_generated(db_id, body["kind"], body["depth"], body["expertise"], body["content"])
+    await db_async.save_generated(db_id, body["kind"], body["depth"], body["expertise"], body["content"])
     return {"ok": True}
 
 
 @router.get("/api/my/repos/{db_id}/generated")
 async def get_generated_content(db_id: int, request: Request):
-    user = get_current_user(request)
+    user = await get_current_user(request)
     if not user:
         return JSONResponse({"error": "Not authenticated"}, 401)
-    return database.get_generated(db_id)
+    return await db_async.get_generated(db_id)
 
 
 @router.post("/api/my/repos/{db_id}/chat")
 async def save_chat_message(db_id: int, request: Request):
-    user = get_current_user(request)
+    user = await get_current_user(request)
     if not user:
         return JSONResponse({"error": "Not authenticated"}, 401)
     body = await request.json()
-    database.save_chat(db_id, body["role"], body["message"], body.get("selection"), body.get("file_path"))
+    await db_async.save_chat(db_id, body["role"], body["message"], body.get("selection"), body.get("file_path"))
     return {"ok": True}
 
 
 @router.get("/api/my/repos/{db_id}/chats")
 async def get_chat_history(db_id: int, request: Request):
-    user = get_current_user(request)
+    user = await get_current_user(request)
     if not user:
         return JSONResponse({"error": "Not authenticated"}, 401)
-    return database.get_chats(db_id)
+    return await db_async.get_chats(db_id)
