@@ -95,6 +95,38 @@
 </head>
 <body class="bg-gray-950 text-gray-100 h-screen overflow-hidden">
 
+<!-- Fallback: if Alpine hasn't initialized within 4 seconds, show a reload prompt -->
+<div id="alpine-fallback" style="display:none;position:fixed;inset:0;z-index:9999;background:#09090b;color:#d1d5db;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;font-family:system-ui,sans-serif;">
+    <p style="font-size:18px;">Loading RepoLM...</p>
+    <p id="alpine-fallback-hint" style="font-size:14px;color:#6b7280;display:none;">Taking too long? <a href="/app" style="color:#a78bfa;text-decoration:underline;">Click here to reload</a></p>
+</div>
+<script>
+(function() {
+    var fb = document.getElementById('alpine-fallback');
+    var hint = document.getElementById('alpine-fallback-hint');
+    fb.style.display = 'flex';
+    // Show reload hint after 4 seconds
+    var hintTimer = setTimeout(function() { hint.style.display = 'block'; }, 4000);
+    // Hide fallback once Alpine initializes (x-cloak is removed)
+    var checkTimer = setInterval(function() {
+        var appEl = document.querySelector('[x-data]');
+        if (appEl && !appEl.hasAttribute('x-cloak')) {
+            fb.style.display = 'none';
+            clearTimeout(hintTimer);
+            clearInterval(checkTimer);
+        }
+    }, 100);
+    // Safety: auto-reload after 10 seconds if Alpine never loads
+    setTimeout(function() {
+        var appEl = document.querySelector('[x-data]');
+        if (appEl && appEl.hasAttribute('x-cloak')) {
+            console.error('[RepoLM] Alpine.js failed to initialize after 10s, reloading...');
+            window.location.href = '/app?retry=' + Date.now();
+        }
+    }, 10000);
+})();
+</script>
+
 <div x-data="repolm()" x-init="init()" x-cloak class="h-screen flex flex-col">
 
 <!-- Checkout success banner -->
@@ -907,16 +939,24 @@ function repolm() {
         busyRetryCount: 0,
 
         init() {
-            // Force full reload when restored from bfcache (back/forward navigation).
-            // Without this, Alpine state is stale (dead intervals, old repoId, broken connections).
+            console.log('[RepoLM] init() starting', {timestamp: Date.now(), persisted: performance.navigation ? performance.navigation.type : 'unknown'});
+
+            // Prevent bfcache restoration — Alpine state becomes stale (dead intervals,
+            // old repoId, broken connections) when the page is restored from bfcache.
+            window.addEventListener('unload', () => {});
             window.addEventListener('pageshow', (e) => {
-                if (e.persisted) window.location.reload();
+                if (e.persisted) {
+                    console.log('[RepoLM] bfcache detected, reloading');
+                    window.location.href = '/app?t=' + Date.now();
+                    return;
+                }
             });
 
             // Start server health polling
             this._healthInterval = setInterval(() => this.checkServerHealth(), 30000);
             this.checkServerHealth();
             this.checkAuth();
+            console.log('[RepoLM] init() complete');
             const params = new URLSearchParams(window.location.search);
             const exSlug = params.get('example');
             if (exSlug) this.loadExample(exSlug);

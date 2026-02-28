@@ -304,7 +304,13 @@ async def app_page():
     html = TEMPLATES_DIR.joinpath("app.html").read_text()
     html = html.replace("__CARBON_SERVE__", CARBON_SERVE)
     html = html.replace("__CARBON_PLACEMENT__", CARBON_PLACEMENT)
-    return HTMLResponse(html)
+    return HTMLResponse(
+        html,
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+        },
+    )
 
 
 @app.get("/developers", response_class=HTMLResponse)
