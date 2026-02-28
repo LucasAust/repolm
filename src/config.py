@@ -88,7 +88,7 @@ REFERRAL_BONUS_REFEREE = 5
 DEFAULT_SIGNUP_TOKENS = 10
 
 # ── Edge TTS Voices ──
-EDGE_VOICES = {"ALEX": "en-US-GuyNeural", "SAM": "en-US-JennyNeural"}
+EDGE_VOICES = {"ALEX": "en-US-AndrewMultilingualNeural", "SAM": "en-US-AvaMultilingualNeural"}
 
 # ── Output Directories ──
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
@@ -175,12 +175,20 @@ Rules:
 - Alex asks the questions a learner would ask
 - Sam explains with analogies and code examples
 - Include at least 3 specific code references (file paths, function names, etc.)
+- Use CONTRACTIONS (don't, it's, they're, wouldn't) — never "do not" or "it is" in casual speech
+- Add natural filler/reactions: "Oh wow", "Right right", "Hmm", "Yeah so", "I mean", "Honestly"
+- Vary sentence length — mix short punchy reactions with longer explanations
+- Use ellipses for trailing off: "So basically what they did was..."
+- Use dashes for self-correction: "It's like a — actually no, it's more like a..."
+- Hosts should react to each other: "Oh that's a great point", "Ha, exactly", "Okay okay I see where you're going"
+- Keep sentences SHORT for speech. Break long sentences into multiple short ones.
+- NEVER use semicolons. Spoken language doesn't have semicolons.
 
 Format each line as:
 ALEX: [dialogue]
 SAM: [dialogue]
 
-Make it sound like real people talking, not robots reading docs."""
+Make it sound like two friends geeking out over code at a coffee shop, not a scripted corporate podcast."""
 
 PODCAST_BEGINNER_EXTRA = """
 BEGINNER LEVEL ADJUSTMENTS:
