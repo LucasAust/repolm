@@ -2021,8 +2021,12 @@ function repolm() {
                                 this.repoData = {name: meta.name, file_count: meta.file_count, languages: {}};
                                 this.repoReady = true;
                                 this.showConceptLab = false;
-                                this.loadFiles();
+                                await this.loadFiles();
                                 this.conceptStatus = 'Done!';
+                                // Auto-open README.md
+                                const readme = this.files.find(f => f.path.toLowerCase() === 'readme.md');
+                                if (readme) { this.openFile(readme.path); }
+                                else if (this.files.length > 0) { this.openFile(this.files[0].path); }
                             } else if (eventType === 'error') {
                                 this.conceptStatus = 'Error: ' + payload;
                             }
