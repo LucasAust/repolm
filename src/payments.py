@@ -8,7 +8,6 @@ import stripe
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-import db as database
 import db_async
 from auth import get_current_user
 
@@ -191,9 +190,7 @@ async def stripe_webhook(request: Request):
             if pack:
                 uid = int(user_id)
                 await db_async.add_tokens(uid, pack["tokens"], f"Purchased {pack['name']} pack ({pack['tokens']} tokens)")
-                def _set_purchased():
-                    database.set_has_purchased(uid)
-                await db_async.execute_raw(_set_purchased)
+                await db_async.set_has_purchased(uid)
 
         elif user_id and plan_key:
             plan = SUBSCRIPTIONS.get(plan_key)
@@ -207,62 +204,48 @@ async def stripe_webhook(request: Request):
                     subscription_id=sub_id,
                 )
                 await db_async.add_tokens(uid, plan["tokens_per_month"], f"Subscription: {plan['name']} — first month tokens")
-                def _set_purchased():
-                    database.set_has_purchased(uid)
-                await db_async.execute_raw(_set_purchased)
+                await db_async.set_has_purchased(uid)
 
     elif event_type == "invoice.paid":
         sub_id = data.get("subscription")
         customer_id = data.get("customer")
         if sub_id and customer_id:
-            def _handle_invoice():
-                with database.db() as conn:
-                    row = conn.execute("SELECT id, plan FROM users WHERE stripe_customer_id=?", (customer_id,)).fetchone()
-                    if row:
-                        uid = row["id"]
-                        plan_name = row["plan"] or "pro"
-                        tokens = 200
-                        for sk, sv in SUBSCRIPTIONS.items():
-                            if sv["plan"] == plan_name:
-                                tokens = sv["tokens_per_month"]
-                                break
-                        billing_reason = data.get("billing_reason", "")
-                        if billing_reason == "subscription_cycle":
-                            database.add_tokens(uid, tokens, f"Monthly refresh: {plan_name} plan ({tokens} tokens)")
-            await db_async.execute_raw(_handle_invoice)
+            user_row = await db_async.get_user_by_stripe_customer(customer_id)
+            if user_row:
+                uid = user_row["id"]
+                plan_name = user_row["plan"] or "pro"
+                tokens = 200
+                for sk, sv in SUBSCRIPTIONS.items():
+                    if sv["plan"] == plan_name:
+                        tokens = sv["tokens_per_month"]
+                        break
+                billing_reason = data.get("billing_reason", "")
+                if billing_reason == "subscription_cycle":
+                    await db_async.add_tokens(uid, tokens, f"Monthly refresh: {plan_name} plan ({tokens} tokens)")
 
     elif event_type == "customer.subscription.updated":
         sub_id = data.get("id")
         status = data.get("status")
         customer_id = data.get("customer")
         if sub_id and customer_id:
-            def _update_sub():
-                with database.db() as conn:
-                    row = conn.execute("SELECT id FROM users WHERE stripe_customer_id=?", (customer_id,)).fetchone()
-                    if row:
-                        database.update_subscription(row["id"], subscription_status=status)
-            await db_async.execute_raw(_update_sub)
+            user_row = await db_async.get_user_by_stripe_customer(customer_id)
+            if user_row:
+                await db_async.update_subscription(user_row["id"], subscription_status=status)
 
     elif event_type == "customer.subscription.deleted":
         sub_id = data.get("id")
         customer_id = data.get("customer")
         if customer_id:
-            def _delete_sub():
-                with database.db() as conn:
-                    row = conn.execute("SELECT id FROM users WHERE stripe_customer_id=?", (customer_id,)).fetchone()
-                    if row:
-                        database.update_subscription(row["id"], plan="free", subscription_status="canceled", subscription_id=None)
-            await db_async.execute_raw(_delete_sub)
+            user_row = await db_async.get_user_by_stripe_customer(customer_id)
+            if user_row:
+                await db_async.update_subscription(user_row["id"], plan="free", subscription_status="canceled", subscription_id=None)
 
     elif event_type == "invoice.payment_failed":
         customer_id = data.get("customer")
         if customer_id:
-            def _mark_past_due():
-                with database.db() as conn:
-                    row = conn.execute("SELECT id FROM users WHERE stripe_customer_id=?", (customer_id,)).fetchone()
-                    if row:
-                        database.update_subscription(row["id"], subscription_status="past_due")
-            await db_async.execute_raw(_mark_past_due)
+            user_row = await db_async.get_user_by_stripe_customer(customer_id)
+            if user_row:
+                await db_async.update_subscription(user_row["id"], subscription_status="past_due")
 
     return {"ok": True}
 
@@ -275,9 +258,7 @@ async def get_tokens(request: Request):
     balance = await db_async.get_token_balance(user["id"])
     purchased = await db_async.has_ever_purchased(user["id"])
 
-    def _get_txns():
-        return database.get_token_transactions(user["id"], 20)
-    transactions = await db_async.execute_raw(_get_txns)
+    transactions = await db_async.get_token_transactions(user["id"], 20)
     return {"tokens": balance, "has_purchased": purchased, "transactions": transactions}
 
 

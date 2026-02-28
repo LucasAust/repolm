@@ -12,7 +12,6 @@ from fastapi.responses import JSONResponse
 
 from config import TOKEN_COSTS
 from auth import get_current_user
-import db as database
 import db_async
 import state
 from concurrency import ingest_queue, acquire_ingest
@@ -31,12 +30,12 @@ def run_ingest(repo_id, url):
     try:
         def _progress(status, message):
             try:
-                database.update_job(repo_id, status=status, message=message)
+                db_async.sync_update_job(repo_id, status=status, message=message)
             except Exception:
                 pass
 
         data = ingest_repo(url, progress_callback=_progress)
-        database.update_job(repo_id, status="processing", message="Building summary ({} files)...".format(len(data.files)))
+        db_async.sync_update_job(repo_id, status="processing", message="Building summary ({} files)...".format(len(data.files)))
         text = repo_to_text(data)
         file_list = [{"path": f.path, "content": f.content, "size": f.size, "is_priority": f.is_priority} for f in data.files]
         repo_data = {
@@ -51,18 +50,18 @@ def run_ingest(repo_id, url):
         }
         state.repos.set(repo_id, repo_entry)
         state.cache_repo_to_db(repo_id, repo_entry)
-        database.update_job(repo_id, status="ready", message="Ready",
+        db_async.sync_update_job(repo_id, status="ready", message="Ready",
                            result=json.dumps(repo_data))
     except Exception as e:
         logger.exception("Ingest failed for %s", url)
-        database.update_job(repo_id, status="error", message=str(e))
+        db_async.sync_update_job(repo_id, status="error", message=str(e))
 
 
 def run_upload_ingest(repo_id, files_data):
     """Process uploaded folder files. Runs in thread pool (sync is fine)."""
     from ingest import RepoFile, RepoData
     try:
-        database.update_job(repo_id, status="processing", message="Processing uploaded files...")
+        db_async.sync_update_job(repo_id, status="processing", message="Processing uploaded files...")
 
         paths = [f["path"] for f in files_data]
         folder_name = paths[0].split("/")[0] if paths and "/" in paths[0] else "uploaded-project"
@@ -134,11 +133,11 @@ def run_upload_ingest(repo_id, files_data):
         }
         state.repos.set(repo_id, repo_entry)
         state.cache_repo_to_db(repo_id, repo_entry)
-        database.update_job(repo_id, status="ready", message="Ready",
+        db_async.sync_update_job(repo_id, status="ready", message="Ready",
                            result=json.dumps(repo_data))
     except Exception as e:
         logger.exception("Upload ingest failed")
-        database.update_job(repo_id, status="error", message=str(e))
+        db_async.sync_update_job(repo_id, status="error", message=str(e))
 
 
 @router.post("/api/repo")

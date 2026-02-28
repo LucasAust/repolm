@@ -13,7 +13,6 @@ from fastapi.responses import JSONResponse, FileResponse
 
 from config import TOKEN_COSTS
 from auth import get_current_user
-import db as database
 import db_async
 import state
 from concurrency import audio_queue
@@ -25,14 +24,14 @@ logger = logging.getLogger("repolm")
 
 def run_audio_gen(audio_id, script_text):
     """Background worker: generate podcast audio. Runs in thread pool (sync is fine)."""
-    database.update_job(audio_id, status="generating")
+    db_async.sync_update_job(audio_id, status="generating")
     try:
         path = generate_podcast_audio(script_text, audio_id)
-        database.update_job(audio_id, status="done", result=path)
+        db_async.sync_update_job(audio_id, status="done", result=path)
         state.audio_jobs.set(audio_id, {"status": "done", "path": path})
     except Exception as e:
         logger.exception("Audio gen failed for %s", audio_id)
-        database.update_job(audio_id, status="error", message=str(e))
+        db_async.sync_update_job(audio_id, status="error", message=str(e))
 
 
 @router.post("/api/podcast-audio")

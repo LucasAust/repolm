@@ -16,7 +16,6 @@ from config import (
     CHAT_SYSTEM, SELECTION_SYSTEM, get_system_prompt,
 )
 from auth import get_current_user
-import db as database
 import db_async
 import state
 import cache as content_cache
@@ -32,7 +31,7 @@ def run_generate(job_id, repo_id, kind, depth, expertise):
     """Background worker: generate content. Runs in thread pool (sync is fine)."""
     repo = state.get_repo_with_fallback(repo_id)
     if not repo or repo["status"] != "ready":
-        database.update_job(job_id, status="error", message="Repo not ready")
+        db_async.sync_update_job(job_id, status="error", message="Repo not ready")
         return
     try:
         text = repo["text"]
@@ -40,7 +39,7 @@ def run_generate(job_id, repo_id, kind, depth, expertise):
             text = text[:200_000] + "\n\n[... truncated ...]"
         templates = {"overview": OVERVIEW_SYSTEM, "podcast": PODCAST_SYSTEM, "slides": SLIDES_SYSTEM}
         if kind not in templates:
-            database.update_job(job_id, status="error", message="Unknown kind: {}".format(kind))
+            db_async.sync_update_job(job_id, status="error", message="Unknown kind: {}".format(kind))
             return
         system = get_system_prompt(templates[kind], depth, expertise)
         prompts = {
@@ -48,12 +47,12 @@ def run_generate(job_id, repo_id, kind, depth, expertise):
             "podcast": "Write a podcast script about this repository:\n\n{}".format(text),
             "slides": "Create a slide deck about this repository:\n\n{}".format(text),
         }
-        database.update_job(job_id, status="generating", message="Generating {}...".format(kind))
+        db_async.sync_update_job(job_id, status="generating", message="Generating {}...".format(kind))
         result = call_llm(system, prompts[kind])
-        database.update_job(job_id, status="done", message="Done", result=result)
+        db_async.sync_update_job(job_id, status="done", message="Done", result=result)
     except Exception as e:
         logger.exception("Generate failed for job %s", job_id)
-        database.update_job(job_id, status="error", message=str(e))
+        db_async.sync_update_job(job_id, status="error", message=str(e))
 
 
 @router.post("/api/repo/{repo_id}/generate")
@@ -192,7 +191,8 @@ async def generate_stream(repo_id: str, request: Request):
                             if badge:
                                 new = await db_async.grant_achievement(user["id"], badge)
                                 if new:
-                                    defn = database.ACHIEVEMENT_DEFS.get(badge, {})
+                                    from db import ACHIEVEMENT_DEFS
+                                    defn = ACHIEVEMENT_DEFS.get(badge, {})
                                     yield sse_format(json.dumps({"badge": badge, "name": defn.get("name", badge), "emoji": defn.get("emoji", "🏆")}), "achievement")
                         except Exception:
                             pass

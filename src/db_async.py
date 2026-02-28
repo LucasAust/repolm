@@ -415,6 +415,70 @@ async def login_lookup(email: str) -> Optional[dict]:
             return dict(row) if row else None
     return await _run(_lookup)
 
+# ── Purchases ──
+
+async def set_has_purchased(user_id: int):
+    if _USE_POSTGRES:
+        return await _pg.set_has_purchased(user_id)
+    return await _run(_sync.set_has_purchased, user_id)
+
+async def get_token_transactions(user_id: int, limit: int = 20) -> list:
+    if _USE_POSTGRES:
+        return await _pg.get_token_transactions(user_id, limit)
+    return await _run(_sync.get_token_transactions, user_id, limit)
+
+# ── Stripe ──
+
+async def get_user_by_stripe_customer(customer_id: str) -> Optional[dict]:
+    """Look up user by Stripe customer ID."""
+    if _USE_POSTGRES:
+        return await _pg.get_user_by_stripe_customer(customer_id)
+    def _lookup():
+        with _sync.db() as conn:
+            row = conn.execute("SELECT id, plan FROM users WHERE stripe_customer_id=?", (customer_id,)).fetchone()
+            return dict(row) if row else None
+    return await _run(_lookup)
+
+# ── Cleanup ──
+
+async def cleanup_old_jobs(max_age_hours: int = 24):
+    if _USE_POSTGRES:
+        return await _pg.cleanup_old_jobs(max_age_hours)
+    return await _run(_sync.cleanup_old_jobs, max_age_hours)
+
+async def cleanup_rate_limits():
+    if _USE_POSTGRES:
+        pass  # Redis handles TTL-based cleanup
+    else:
+        return await _run(_sync.cleanup_rate_limits)
+
+# ── Health ──
+
+async def db_health_check() -> bool:
+    """Check if DB is responsive."""
+    if _USE_POSTGRES:
+        try:
+            pool = _pg._get_pool()
+            async with pool.acquire() as conn:
+                await conn.fetchval("SELECT 1")
+            return True
+        except Exception:
+            return False
+    def _check():
+        with _sync.db() as conn:
+            conn.execute("SELECT 1").fetchone()
+        return True
+    try:
+        return await _run(_check)
+    except Exception:
+        return False
+
+# ── Sync bridges for background threads ──
+
+def sync_update_job(job_id, status=None, message=None, result=None):
+    """Sync version for background thread workers. Uses sync SQLite."""
+    _sync.update_job(job_id, status=status, message=message, result=result)
+
 # ── Direct DB access (for raw queries) ──
 
 async def execute_raw(fn):

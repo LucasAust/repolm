@@ -34,7 +34,6 @@ from routes.api_v1 import router as api_v1_router
 from routes.referral import router as referral_router
 from routes.seo import router as seo_router
 import state
-import db as database
 import concurrency
 
 logging.basicConfig(
@@ -55,7 +54,7 @@ REQUEST_TIMEOUT = 300  # 5 minutes
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     validate_config()
-    logger.info("RepoLM %s starting | DB: %s | PID: %d", APP_VERSION, database.DB_PATH, os.getpid())
+    logger.info("RepoLM %s starting | DB: %s | PID: %d", APP_VERSION, os.environ.get("DATABASE_URL", "sqlite (local)"), os.getpid())
 
     # Initialize PostgreSQL pool if DATABASE_URL is set
     if os.environ.get("DATABASE_URL"):
@@ -281,62 +280,57 @@ async def health():
     import asyncio
     loop = asyncio.get_running_loop()
 
-    # Run ALL sync I/O in executor to never block the event loop
-    def _sync_health():
-        try:
-            with database.db() as conn:
-                conn.execute("SELECT 1").fetchone()
-            db_ok = True
-        except Exception:
-            db_ok = False
+    import db_async as _dba
 
+    # DB check (async)
+    db_ok = await _dba.db_health_check()
+
+    # Run sync I/O in executor
+    def _sync_health():
         pools = concurrency.get_pool_status()
         disk = state.get_disk_usage()
-
         from services.llm import get_circuit_stats
         circuit = get_circuit_stats()
-
-        max_util = max(pools["ingest"]["utilization"], pools["generate"]["utilization"], pools["audio"]["utilization"])
-        pressure = "low"
-        if max_util > 0.5:
-            pressure = "medium"
-        if max_util > 0.8:
-            pressure = "high"
-
-        status = "ok"
-        if not db_ok or circuit["circuit_open"]:
-            status = "degraded"
-        if disk.get("alert"):
-            status = "degraded"
-
-        return {
-            "status": status,
-            "version": APP_VERSION,
-            "uptime": round(time.time() - _start_time, 1),
-            "db": "ok" if db_ok else "error",
-            "pools": pools,
-            "disk": disk,
-            "circuit_breaker": circuit,
-            "pressure": pressure,
-        }
+        return pools, disk, circuit
 
     try:
-        return await asyncio.wait_for(loop.run_in_executor(None, _sync_health), timeout=3.0)
+        pools, disk, circuit = await asyncio.wait_for(loop.run_in_executor(None, _sync_health), timeout=3.0)
     except asyncio.TimeoutError:
         return {"status": "ok", "version": APP_VERSION, "uptime": round(time.time() - _start_time, 1), "pressure": "low"}
+
+    max_util = max(pools["ingest"]["utilization"], pools["generate"]["utilization"], pools["audio"]["utilization"])
+    pressure = "low"
+    if max_util > 0.5:
+        pressure = "medium"
+    if max_util > 0.8:
+        pressure = "high"
+
+    status = "ok"
+    if not db_ok or circuit["circuit_open"]:
+        status = "degraded"
+    if disk.get("alert"):
+        status = "degraded"
+
+    return {
+        "status": status,
+        "version": APP_VERSION,
+        "uptime": round(time.time() - _start_time, 1),
+        "db": "ok" if db_ok else "error",
+        "pools": pools,
+        "disk": disk,
+        "circuit_breaker": circuit,
+        "pressure": pressure,
+    }
 
 
 @app.get("/ready")
 async def ready():
-    import asyncio
-    def _check():
-        with database.db() as conn:
-            conn.execute("CREATE TABLE IF NOT EXISTS _health_check (id INTEGER)")
-            conn.execute("SELECT 1").fetchone()
-        return True
+    import db_async as _dba
     try:
-        await asyncio.wait_for(asyncio.get_running_loop().run_in_executor(None, _check), timeout=3.0)
-        return {"status": "ready"}
+        ok = await asyncio.wait_for(_dba.db_health_check(), timeout=3.0)
+        if ok:
+            return {"status": "ready"}
+        return JSONResponse({"status": "not_ready", "error": "DB check failed"}, 503)
     except Exception as e:
         return JSONResponse({"status": "not_ready", "error": str(e)}, 503)
 

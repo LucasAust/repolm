@@ -322,9 +322,9 @@ async def cleanup_stores():
         for store in [repos, jobs, audio_jobs, shared_content]:
             total += store.cleanup()
         try:
-            from db import cleanup_old_jobs, cleanup_rate_limits
-            cleanup_old_jobs()
-            cleanup_rate_limits()
+            import db as _sync_db
+            _sync_db.cleanup_old_jobs(max_age_hours=24)
+            _sync_db.cleanup_rate_limits()
         except Exception:
             pass
         # Disk cleanup every 30 min (every 3 cycles)

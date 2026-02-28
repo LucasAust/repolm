@@ -515,6 +515,14 @@ async def get_token_transactions(user_id: int, limit: int = 20) -> list:
         return [_record_to_dict(r) for r in rows]
 
 
+async def get_user_by_stripe_customer(customer_id: str) -> Optional[dict]:
+    pool = _get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT id, plan FROM users WHERE stripe_customer_id=$1", customer_id)
+        return dict(row) if row else None
+
+
 # ── Subscriptions ──
 
 async def update_subscription(user_id: int, **kwargs):

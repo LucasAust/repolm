@@ -11,7 +11,6 @@ from typing import Optional
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, RedirectResponse
-import db as database
 import db_async
 
 router = APIRouter()
@@ -57,7 +56,8 @@ def get_current_user_sync(request: Request) -> Optional[dict]:
         token = request.cookies.get(SESSION_COOKIE)
     if not token:
         return None
-    return database.get_user_by_session(token)
+    import db as _sync_db
+    return _sync_db.get_user_by_session(token)
 
 
 async def get_user_plan(request: Request) -> str:
