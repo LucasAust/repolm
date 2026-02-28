@@ -377,7 +377,45 @@ async def cache_repo_to_db(repo_id: str, repo_data: dict):
     return await _run(_state.cache_repo_to_db, repo_id, repo_data)
 
 
-# ── Direct DB access (for signup/login raw queries) ──
+# ── Auth (signup/login) ──
+
+async def check_email_exists(email: str) -> Optional[dict]:
+    if _USE_POSTGRES:
+        return await _pg.check_email_exists(email)
+    def _check():
+        with _sync.db() as conn:
+            row = conn.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone()
+            return dict(row) if row else None
+    return await _run(_check)
+
+async def create_user_with_password(username, email, pw_hash, salt, signup_tokens, referral_note=""):
+    if _USE_POSTGRES:
+        return await _pg.create_user_with_password(username, email, pw_hash, salt, signup_tokens, referral_note)
+    def _create():
+        with _sync.db() as conn:
+            cur = conn.execute(
+                "INSERT INTO users (username, email, password_hash, password_salt) VALUES (?,?,?,?)",
+                (username, email, pw_hash, salt))
+            user_id = cur.lastrowid
+            conn.execute("UPDATE users SET tokens = ? WHERE id=?", (signup_tokens, user_id))
+            conn.execute(
+                "INSERT INTO token_transactions (user_id, amount, action, description) VALUES (?,?,?,?)",
+                (user_id, signup_tokens, "bonus", "Welcome bonus" + referral_note))
+            return user_id
+    return await _run(_create)
+
+async def login_lookup(email: str) -> Optional[dict]:
+    if _USE_POSTGRES:
+        return await _pg.login_lookup(email)
+    def _lookup():
+        with _sync.db() as conn:
+            row = conn.execute(
+                "SELECT id, username, password_hash, password_salt FROM users WHERE email=?", (email,)
+            ).fetchone()
+            return dict(row) if row else None
+    return await _run(_lookup)
+
+# ── Direct DB access (for raw queries) ──
 
 async def execute_raw(fn):
     """Run a function that uses db() context manager in executor."""

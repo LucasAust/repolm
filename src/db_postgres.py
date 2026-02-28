@@ -273,6 +273,37 @@ def _record_to_dict(record: asyncpg.Record) -> dict:
     return dict(record)
 
 
+# ── Auth (signup/login raw queries) ──
+
+async def check_email_exists(email: str) -> Optional[dict]:
+    pool = _get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT id FROM users WHERE email=$1", email)
+        return _record_to_dict(row) if row else None
+
+
+async def create_user_with_password(username: str, email: str, pw_hash: str, salt: str, signup_tokens: int, referral_note: str = "") -> int:
+    pool = _get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            user_id = await conn.fetchval(
+                "INSERT INTO users (username, email, password_hash, password_salt) VALUES ($1,$2,$3,$4) RETURNING id",
+                username, email, pw_hash, salt)
+            await conn.execute("UPDATE users SET tokens = $1 WHERE id=$2", signup_tokens, user_id)
+            await conn.execute(
+                "INSERT INTO token_transactions (user_id, amount, action, description) VALUES ($1,$2,$3,$4)",
+                user_id, signup_tokens, "bonus", "Welcome bonus" + referral_note)
+            return user_id
+
+
+async def login_lookup(email: str) -> Optional[dict]:
+    pool = _get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT id, username, password_hash, password_salt FROM users WHERE email=$1", email)
+        return _record_to_dict(row) if row else None
+
+
 # ── Users ──
 
 async def create_or_update_user(github_id: int, username: str, email: str = None, avatar_url: str = None) -> int:

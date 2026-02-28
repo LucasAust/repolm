@@ -85,11 +85,7 @@ async def signup(request: Request):
         username = email.split("@")[0]
 
     # Check if email exists
-    def _check_existing():
-        with database.db() as conn:
-            return conn.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone()
-
-    existing = await db_async.execute_raw(_check_existing)
+    existing = await db_async.check_email_exists(email)
     if existing:
         return JSONResponse({"error": "Account already exists. Try logging in."}, 409)
 
@@ -103,21 +99,8 @@ async def signup(request: Request):
     if referrer:
         signup_tokens = 15  # Extra 5 for referred users
 
-    def _create_user():
-        with database.db() as conn:
-            cur = conn.execute(
-                "INSERT INTO users (username, email, password_hash, password_salt) VALUES (?,?,?,?)",
-                (username, email, pw_hash, salt)
-            )
-            user_id = cur.lastrowid
-            conn.execute("UPDATE users SET tokens = ? WHERE id=?", (signup_tokens, user_id))
-            conn.execute(
-                "INSERT INTO token_transactions (user_id, amount, action, description) VALUES (?,?,?,?)",
-                (user_id, signup_tokens, "bonus", "Welcome bonus" + (" (referral)" if referrer else ""))
-            )
-            return user_id
-
-    user_id = await db_async.execute_raw(_create_user)
+    referral_note = " (referral)" if referrer else ""
+    user_id = await db_async.create_user_with_password(username, email, pw_hash, salt, signup_tokens, referral_note)
 
     # Handle referral rewards
     if referrer:
@@ -148,13 +131,7 @@ async def login(request: Request):
     if not email or not password:
         return JSONResponse({"error": "Email and password required"}, 400)
 
-    def _lookup():
-        with database.db() as conn:
-            return conn.execute(
-                "SELECT id, username, password_hash, password_salt FROM users WHERE email=?", (email,)
-            ).fetchone()
-
-    row = await db_async.execute_raw(_lookup)
+    row = await db_async.login_lookup(email)
 
     if not row:
         return JSONResponse({"error": "Invalid email or password"}, 401)
