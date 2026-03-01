@@ -38,8 +38,8 @@ nav{display:flex;align-items:center;gap:1.5rem;margin-bottom:2rem;padding-bottom
 nav a{color:#9ca3af;text-decoration:none;font-size:.875rem}nav a:hover{color:#fff}
 nav .logo{font-size:1.25rem;font-weight:700}nav .logo span{color:#c084fc}
 </style></head><body>
-<nav><a id="back-link" href="/">← Home</a><a href="/" class="logo"><span>Repo</span>LM</a><a href="/pricing">Pricing</a><a href="/learn">Learn</a></nav>
-<script>if(document.referrer.includes('/app')){var b=document.getElementById('back-link');b.href='/app';b.textContent='\\u2190 Back to App';}</script>
+<nav><a id="back-link" href="/" style="background:#1f2937;padding:0.35rem 0.75rem;border-radius:0.5rem;color:#e5e7eb">&larr; Home</a><div style="flex:1"></div><a href="/" class="logo"><span>Repo</span>LM</a><div style="flex:1"></div><a href="/pricing">Pricing</a><a href="/learn">Learn</a></nav>
+<script>if(document.referrer.includes('/app')){var b=document.getElementById('back-link');b.href='/app';b.innerHTML='&larr; Back to App';}</script>
 <h1>RepoLM API v1</h1>
 <p>Programmatic access to repo ingestion, generation, and analysis.</p>
 <p style="margin-top:.5rem">Base URL: <code>https://repolm.com/api/v1</code></p>
