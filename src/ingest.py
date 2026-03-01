@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Tuple
 
 # Max file size to include (skip binaries / huge files)
-MAX_FILE_SIZE = 50_000  # 50KB per file (was 100KB — big files are rarely worth it)
+MAX_FILE_SIZE = 100_000  # 100KB per file
 MAX_TOTAL_CHARS = 800_000  # 800K chars total budget (was 500K)
 MAX_FILES_TO_WALK = 5000  # Stop walking after this many eligible files
 MAX_FILES_FOR_IMPORT_GRAPH = 500  # Skip import graph for huge repos
