@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>RepoLM</title>
 <meta name="theme-color" content="#09090b">
 <meta name="description" content="AI-powered code education. Paste a GitHub repo, get overviews, podcasts, slides, and interactive learning.">
@@ -70,6 +70,12 @@
   .mobile-tab-bar button.active{color:#a78bfa}
   .mobile-tab-bar .tab-icon{font-size:20px}
   .main-layout{padding-bottom:56px}
+  /* Prevent iOS zoom on input focus */
+  input,select,textarea{font-size:16px!important}
+  /* iOS safe areas */
+  .mobile-tab-bar{padding-bottom:env(safe-area-inset-bottom)}
+  /* Prevent iOS keyboard pushing layout */
+  html,body{position:fixed;width:100%;height:100%;overflow:hidden}
   /* Immersive: stack vertically on mobile */
   .immersive-layout{flex-direction:column!important}
   .immersive-layout .immersive-code{flex:none!important;height:45%;overflow-y:auto}
@@ -506,7 +512,7 @@
 </aside>
 
 <!-- Content column (sidebar peer) -->
-<div class="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
+<div class="flex-1 flex flex-col min-w-0 min-h-0 overflow-x-hidden">
 
 <!-- Mobile top bar -->
 <div class="md:hidden h-12 flex items-center px-3 gap-3 border-b border-gray-800 bg-gray-950 shrink-0 z-20" x-data="{mobileMenu: false}">
@@ -713,7 +719,7 @@
                         </div>
                     </template>
                 </div>
-                <div class="border-t border-gray-800 p-4 pb-16 md:pb-4">
+                <div class="border-t border-gray-800 p-4">
                     <div class="flex gap-2">
                         <input x-model="chatInput" type="text" placeholder="Ask about this codebase..."
                             @keydown.enter="sendChat()"
@@ -887,7 +893,7 @@
                             </div>
                         </template>
                     </div>
-                    <div class="border-t border-gray-800 p-2 pb-16 md:pb-2">
+                    <div class="border-t border-gray-800 p-2">
                         <div class="flex gap-1">
                             <input x-model="immersiveInput" type="text" :placeholder="selectedText ? 'Ask about selection...' : 'Ask about this file...'"
                                 @keydown.enter="sendImmersive()"
