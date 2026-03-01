@@ -91,8 +91,8 @@ body::after{
 }
 
 /* Ambient light */
-.hero-glow{position:absolute;top:-200px;left:50%;transform:translateX(-50%);width:900px;height:600px;border-radius:50%;background:radial-gradient(ellipse at 35% 50%,rgba(168,85,247,0.1) 0%,rgba(56,189,248,0.05) 40%,transparent 65%);pointer-events:none;z-index:0}
-.hero-glow::after{content:'';position:absolute;top:80px;right:-100px;width:500px;height:400px;border-radius:50%;background:radial-gradient(circle,rgba(56,189,248,0.06) 0%,transparent 60%)}
+.hero-glow{position:absolute;top:-200px;left:50%;transform:translateX(-50%);width:900px;height:600px;border-radius:50%;background:radial-gradient(ellipse at 35% 50%,rgba(168,85,247,0.12) 0%,rgba(139,92,246,0.06) 40%,transparent 65%);pointer-events:none;z-index:0}
+.hero-glow::after{content:'';position:absolute;top:80px;right:-100px;width:500px;height:400px;border-radius:50%;background:radial-gradient(circle,rgba(192,132,252,0.06) 0%,transparent 60%)}
 
 .hero-inner{position:relative;z-index:1;max-width:720px}
 .hero-inner .eyebrow{
@@ -913,22 +913,21 @@ document.addEventListener('DOMContentLoaded',()=>{
 
         ctx.lineWidth=0.8;
 
-        // Color gradient helper: maps position + height to purple→cyan→blue
+        // Purple ocean gradient: dark violet → bright purple → soft magenta
         const waveColor=(pos,h,alpha)=>{
-          // pos: 0-1 across grid, h: wave height normalized
-          const hueShift=pos*0.6+Math.abs(h)*0.4; // 0→1
-          // Purple (168,85,247) → Cyan (56,189,248) → Blue (99,102,241)
+          const t=pos*0.5+Math.abs(h)*0.5;
+          // Dark purple (88,28,135) → Bright purple (168,85,247) → Soft pink-purple (192,132,252)
           let r,g,b;
-          if(hueShift<0.5){
-            const t=hueShift*2;
-            r=Math.round(168+(56-168)*t);
-            g=Math.round(85+(189-85)*t);
-            b=Math.round(247+(248-247)*t);
+          if(t<0.5){
+            const s=t*2;
+            r=Math.round(88+(168-88)*s);
+            g=Math.round(28+(85-28)*s);
+            b=Math.round(135+(247-135)*s);
           } else {
-            const t=(hueShift-0.5)*2;
-            r=Math.round(56+(99-56)*t);
-            g=Math.round(189+(102-189)*t);
-            b=Math.round(248+(241-248)*t);
+            const s=(t-0.5)*2;
+            r=Math.round(168+(192-168)*s);
+            g=Math.round(85+(132-85)*s);
+            b=Math.round(247+(252-247)*s);
           }
           return`rgba(${r},${g},${b},${alpha})`;
         };
