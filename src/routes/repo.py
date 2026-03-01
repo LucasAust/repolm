@@ -403,6 +403,8 @@ async def get_saved_repo(db_id: int, request: Request):
         "text": saved.get("repo_text", ""),
     }
     state.repos.set(repo_id, repo_entry)
+    # Persist to Postgres so files survive memory eviction and page reloads
+    await db_async.cache_repo_to_db(repo_id, repo_entry)
     return {"repo_id": repo_id, "data": repo_entry["data"], "file_index": saved["file_index"], "has_files": len(files) > 0}
 
 

@@ -56,6 +56,10 @@ async def lifespan(app: FastAPI):
     validate_config()
     logger.info("RepoLM %s starting | DB: %s | PID: %d", APP_VERSION, os.environ.get("DATABASE_URL", "sqlite (local)"), os.getpid())
 
+    # Store main event loop for sync bridges in background threads
+    import db_async
+    db_async.set_main_loop(asyncio.get_running_loop())
+
     # Initialize PostgreSQL pool if DATABASE_URL is set
     if os.environ.get("DATABASE_URL"):
         try:

@@ -30,6 +30,15 @@ import state as _state
 from concurrent.futures import ThreadPoolExecutor
 _db_pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="db-async")
 
+# Main event loop reference — set at startup, used by sync bridges in background threads
+_main_loop = None  # type: Optional[asyncio.AbstractEventLoop]
+
+
+def set_main_loop(loop):
+    """Call once at app startup to store the main event loop for sync bridges."""
+    global _main_loop
+    _main_loop = loop
+
 
 async def _run(fn, *args, **kwargs):
     """Run a sync function in a dedicated DB thread pool (never starved by LLM/other I/O)."""
@@ -385,14 +394,13 @@ async def get_repo_with_fallback(repo_id):
 
 def sync_get_repo_with_fallback(repo_id):
     # type: (str) -> Optional[dict]
-    """Sync bridge for background threads — memory → Postgres via event loop."""
+    """Sync bridge for background threads — memory → Postgres via main event loop."""
     repo = _state.repos.get(repo_id)
     if repo:
         return repo
-    if _USE_POSTGRES:
+    if _USE_POSTGRES and _main_loop and _main_loop.is_running():
         try:
-            loop = asyncio.get_running_loop()
-            future = asyncio.run_coroutine_threadsafe(_pg.load_repo(repo_id), loop)
+            future = asyncio.run_coroutine_threadsafe(_pg.load_repo(repo_id), _main_loop)
             pg_repo = future.result(timeout=10)
             if pg_repo and pg_repo.get("status") == "ready":
                 _state.repos.set(repo_id, pg_repo)
@@ -431,18 +439,19 @@ async def cache_repo_to_db(repo_id, repo_data):
 
 def sync_cache_repo_to_db(repo_id, repo_data):
     # type: (str, dict) -> None
-    """Sync bridge for background threads — schedules Postgres write on event loop."""
+    """Sync bridge for background threads — schedules Postgres write on main event loop."""
+    if not _main_loop or not _main_loop.is_running():
+        logger.warning("sync_cache_repo_to_db: no main loop available for %s", repo_id)
+        return
     if _USE_POSTGRES:
         try:
-            loop = asyncio.get_running_loop()
-            asyncio.run_coroutine_threadsafe(_pg.cache_repo(repo_id, repo_data), loop)
+            asyncio.run_coroutine_threadsafe(_pg.cache_repo(repo_id, repo_data), _main_loop)
         except Exception:
             logger.exception("sync_cache_repo_to_db failed for %s", repo_id)
     try:
         import redis_client
         if redis_client.is_available():
-            loop = asyncio.get_running_loop()
-            asyncio.run_coroutine_threadsafe(redis_client.cache_repo(repo_id, repo_data), loop)
+            asyncio.run_coroutine_threadsafe(redis_client.cache_repo(repo_id, repo_data), _main_loop)
     except Exception:
         pass
 
