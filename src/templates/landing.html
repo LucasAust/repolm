@@ -36,8 +36,8 @@
   --ease:cubic-bezier(0.33,1,0.68,1);
 }
 
-html{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
-body{background:var(--bg);color:var(--text);font-family:var(--font);overflow-x:hidden;line-height:1.6}
+html{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;overflow-x:hidden}
+body{background:var(--bg);color:var(--text);font-family:var(--font);overflow-x:hidden;line-height:1.6;max-width:100vw}
 a{color:inherit;text-decoration:none}
 button{font-family:inherit;cursor:pointer;border:none;background:none}
 ::selection{background:rgba(168,85,247,0.25)}
@@ -411,6 +411,24 @@ section{padding:clamp(100px,14vw,160px) 0}
   .gs{opacity:1!important;transform:none!important}
 }
 :focus-visible{outline:2px solid var(--purple);outline-offset:3px;border-radius:4px}
+
+/* Mobile overflow fixes */
+@media(max-width:640px){
+  .wrap{padding:0 16px}
+  *{max-width:100%}
+  .feature-vis{aspect-ratio:auto;min-height:200px}
+  .vis-deck-card{width:90%;padding:14px}
+  .product-body{overflow:hidden}
+  .p-main{overflow:hidden;padding:16px}
+  .vp-player{flex-wrap:wrap}
+  .vd-diagram{overflow:hidden;max-width:100%}
+  section{overflow:hidden}
+  .hero-inner h1{font-size:clamp(1.8rem,7vw,2.8rem)}
+  .hero-sub{font-size:0.9rem}
+  .hero-actions{flex-direction:column;gap:10px}
+  .hero-actions a,.hero-actions button{width:100%;text-align:center}
+  pre,code{overflow-x:auto;max-width:100%;word-break:break-all}
+}
 </style>
 </head>
 <body>
