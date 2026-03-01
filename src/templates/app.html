@@ -1495,8 +1495,12 @@ function repolm() {
             try {
                 const res = await fetch(`/api/repo/${this.repoId}/file?path=${encodeURIComponent(path)}`);
                 const data = await res.json();
-                this.fileContent = data.content;
-            } catch(e) { this.fileContent = 'Failed to load file'; }
+                if (data.content !== undefined) {
+                    this.fileContent = data.content;
+                } else {
+                    this.fileContent = data.error ? ('// Error: ' + data.error) : '// File not available. Try re-analyzing the repo.';
+                }
+            } catch(e) { this.fileContent = '// Failed to load file. Try re-analyzing the repo.'; }
             if (this.mode === 'chat') this.mode = 'viewer';
         },
 

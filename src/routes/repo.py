@@ -25,6 +25,33 @@ router = APIRouter()
 logger = logging.getLogger("repolm")
 
 
+async def find_cached_repo_any(url: str):
+    """Find a cached repo by URL — no TTL limit, works for all URL types."""
+    import sqlite3
+    import time as _time
+    try:
+        normalized = url.strip().lower().rstrip("/").replace(".git", "")
+        conn = sqlite3.connect(state.REPO_CACHE_DB)
+        conn.row_factory = sqlite3.Row
+        # For github URLs, match by path; for others, match exactly
+        if "github.com/" in normalized:
+            pattern = "%" + normalized.split("github.com/")[-1] + "%"
+        else:
+            pattern = "%" + normalized + "%"
+        row = conn.execute(
+            """SELECT repo_id FROM repo_cache
+               WHERE status='ready' AND json_extract(data_json, '$.url') LIKE ?
+               ORDER BY accessed_at DESC LIMIT 1""",
+            (pattern,)
+        ).fetchone()
+        conn.close()
+        if row:
+            return row["repo_id"]
+    except Exception:
+        logger.exception("find_cached_repo_any failed")
+    return None
+
+
 def run_ingest(repo_id, url):
     """Background worker: clone and process a repo. Runs in thread pool (sync is fine)."""
     try:
@@ -336,11 +363,11 @@ async def get_saved_repo(db_id: int, request: Request):
     saved = await db_async.get_repo(db_id, user["id"])
     if not saved:
         return JSONResponse({"error": "Not found"}, 404)
-    # Try to restore full files from cold cache (keyed by URL)
+    # Try to restore full files from cold cache
     files = []
     url = saved.get("url", "")
     if url:
-        cached_id = await db_async.find_cached_repo_by_url(url)
+        cached_id = await find_cached_repo_any(url)
         if cached_id:
             cached = await db_async.get_repo_with_fallback(cached_id)
             if cached and cached.get("files"):
