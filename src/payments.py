@@ -24,7 +24,6 @@ PACKS = {
     "builder": {"name": "Builder", "tokens": 1500, "price_cents": 1200, "price_id": os.environ.get("STRIPE_PRICE_BUILDER", "")},
     "pro": {"name": "Pro", "tokens": 5000, "price_cents": 2900, "price_id": os.environ.get("STRIPE_PRICE_PRO", "")},
     "team": {"name": "Team", "tokens": 20000, "price_cents": 7900, "price_id": os.environ.get("STRIPE_PRICE_TEAM", "")},
-    "test": {"name": "Test Pack", "tokens": 1000000000, "price_cents": 100, "price_id": os.environ.get("STRIPE_PRICE_TEST", "")},
 }
 
 SUBSCRIPTIONS = {
