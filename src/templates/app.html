@@ -127,7 +127,7 @@
 })();
 </script>
 
-<div x-data="repolm()" x-init="init()" x-cloak class="h-screen flex flex-col">
+<div x-data="repolm()" x-init="init()" x-cloak class="h-screen flex flex-row">
 
 <!-- Checkout success banner -->
 <div x-show="checkoutSuccess" x-transition class="fixed top-0 left-0 right-0 z-50 bg-green-600 text-white text-center py-3 text-sm font-medium">
@@ -356,117 +356,147 @@
     </div>
 </div>
 
-<!-- Top bar -->
-<div class="h-12 border-b border-gray-800 flex items-center px-4 gap-4 shrink-0 bg-gray-950">
-    <a href="/" class="text-lg font-bold hover:opacity-80"><span class="text-purple-400">Repo</span>LM</a>
-    <a href="/learn" class="text-xs text-gray-400 hover:text-purple-300 transition">📚 Learn</a>
-    <a href="/pricing" class="text-xs text-gray-400 hover:text-purple-300 transition">💎 Pricing</a>
-    <button @click="showConceptLab=true" class="text-xs text-gray-400 hover:text-purple-300 transition">🧪 Lab</button>
+<!-- Sidebar -->
+<aside :class="sidebarOpen ? 'w-56' : 'w-12'" class="h-screen shrink-0 border-r border-gray-800 bg-gray-950 flex flex-col transition-all duration-200 overflow-hidden relative z-30">
+    <!-- Sidebar header -->
+    <div class="h-12 flex items-center px-3 shrink-0 border-b border-gray-800">
+        <button @click="sidebarOpen=!sidebarOpen" class="text-gray-400 hover:text-white transition text-sm w-6 h-6 flex items-center justify-center" :title="sidebarOpen?'Collapse':'Expand'">
+            <span x-text="sidebarOpen ? '◀' : '▶'"></span>
+        </button>
+        <a x-show="sidebarOpen" href="/" class="ml-2 text-lg font-bold hover:opacity-80"><span class="text-purple-400">Repo</span>LM</a>
+    </div>
 
-    <!-- My Repos dropdown -->
-    <template x-if="user">
-        <div class="relative" x-data="{showRepoMenu: false}" @click.away="showRepoMenu=false">
-            <button @click="showRepoMenu=!showRepoMenu" class="text-xs text-gray-400 hover:text-purple-300 transition flex items-center gap-1">
-                📂 My Repos
-                <span x-show="savedRepos.length" class="bg-purple-600 text-white text-[10px] px-1.5 py-0.5 rounded-full" x-text="savedRepos.length"></span>
+    <!-- Sidebar content (scrollable) -->
+    <div class="flex-1 overflow-y-auto py-2">
+        <!-- Navigation -->
+        <div class="px-2 space-y-0.5">
+            <button @click="resetToHome()" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-gray-400 hover:bg-gray-800 hover:text-white transition" :title="sidebarOpen?'':'New Repo'">
+                <span class="shrink-0 w-5 text-center">➕</span>
+                <span x-show="sidebarOpen">New Repo</span>
             </button>
-            <div x-show="showRepoMenu" x-transition class="absolute top-full left-0 mt-2 w-72 rounded-xl shadow-2xl overflow-hidden" style="z-index:9999;background:#030712;border:1px solid #374151">
-                <div class="px-3 py-2 flex items-center justify-between" style="border-bottom:1px solid #1f2937">
-                    <span class="text-xs text-gray-400 font-medium">Saved Repositories</span>
-                    <button @click="resetToHome(); showRepoMenu=false" class="text-[10px] text-purple-400 hover:text-purple-300">+ New Repo</button>
+            <button @click="showConceptLab=true" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-gray-400 hover:bg-gray-800 hover:text-white transition" :title="sidebarOpen?'':'Concept Lab'">
+                <span class="shrink-0 w-5 text-center">🧪</span>
+                <span x-show="sidebarOpen">Concept Lab</span>
+            </button>
+            <a href="/learn" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-gray-400 hover:bg-gray-800 hover:text-white transition" :title="sidebarOpen?'':'Learn'">
+                <span class="shrink-0 w-5 text-center">📚</span>
+                <span x-show="sidebarOpen">Learn</span>
+            </a>
+            <a href="/api/v1/docs" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-gray-400 hover:bg-gray-800 hover:text-white transition" :title="sidebarOpen?'':'API Docs'">
+                <span class="shrink-0 w-5 text-center">📖</span>
+                <span x-show="sidebarOpen">API Docs</span>
+            </a>
+            <a href="/pricing" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-gray-400 hover:bg-gray-800 hover:text-white transition" :title="sidebarOpen?'':'Pricing'">
+                <span class="shrink-0 w-5 text-center">💎</span>
+                <span x-show="sidebarOpen">Pricing</span>
+            </a>
+        </div>
+
+        <!-- My Repos -->
+        <template x-if="user">
+            <div class="mt-4 px-2">
+                <div x-show="sidebarOpen" class="px-2.5 mb-1.5 flex items-center justify-between">
+                    <span class="text-[10px] text-gray-500 uppercase tracking-wider font-medium">My Repos</span>
+                    <span x-show="savedRepos.length" class="bg-purple-600/30 text-purple-300 text-[10px] px-1.5 py-0.5 rounded-full" x-text="savedRepos.length"></span>
                 </div>
-                <div class="max-h-64 overflow-y-auto">
+                <div x-show="!sidebarOpen" class="flex justify-center mb-1">
+                    <span class="text-xs text-gray-500">📂</span>
+                </div>
+                <div class="space-y-0.5" x-show="sidebarOpen">
                     <template x-if="savedRepos.length === 0">
-                        <p class="px-3 py-4 text-xs text-gray-500 text-center">No saved repos yet</p>
+                        <p class="px-2.5 py-2 text-[11px] text-gray-600">No saved repos</p>
                     </template>
                     <template x-for="r in savedRepos" :key="r.id">
-                        <div class="w-full flex items-center gap-3 hover:bg-gray-800 px-3 py-2.5 transition text-left" style="border-bottom:1px solid rgba(31,41,55,0.5)">
-                            <button @click="loadSavedRepo(r.id); showRepoMenu=false" class="flex-1 min-w-0 text-left">
-                                <p class="text-sm text-white truncate" x-text="r.name"></p>
-                                <p class="text-[10px] text-gray-500" x-text="r.file_count + ' files · ' + Object.keys(r.languages||{}).slice(0,3).join(', ')"></p>
+                        <div class="group flex items-center gap-1 hover:bg-gray-800 rounded-lg transition">
+                            <button @click="loadSavedRepo(r.id)" class="flex-1 min-w-0 text-left px-2.5 py-1.5">
+                                <p class="text-xs text-gray-300 truncate" x-text="r.name"></p>
+                                <p class="text-[10px] text-gray-600 truncate" x-text="r.file_count + ' files'"></p>
                             </button>
-                            <button @click.stop="deleteSavedRepo(r.id)" class="text-gray-500 hover:text-red-400 text-sm shrink-0 px-1">✕</button>
+                            <button @click.stop="deleteSavedRepo(r.id)" class="text-gray-600 hover:text-red-400 text-xs shrink-0 px-1.5 opacity-0 group-hover:opacity-100 transition">✕</button>
                         </div>
                     </template>
                 </div>
             </div>
-        </div>
-    </template>
+        </template>
 
-    <!-- New repo button (when viewing a repo) -->
-    <template x-if="repoReady">
-        <button @click="resetToHome()" class="text-xs text-gray-400 hover:text-purple-300 transition">+ New Repo</button>
-    </template>
-
-    <template x-if="repoData.name">
-        <div class="flex items-center gap-3 text-sm text-gray-400">
-            <span class="text-white font-medium" x-text="repoData.name"></span>
-            <span x-text="repoData.file_count + ' files'"></span>
-            <span x-text="Object.keys(repoData.languages||{}).slice(0,3).join(', ')"></span>
-        </div>
-    </template>
-
-    <div class="ml-auto flex items-center gap-2">
-        <!-- Settings dropdown (depth + level) -->
+        <!-- Settings (when repo loaded) -->
         <template x-if="repoReady">
-            <div class="relative" x-data="{showSettings: false}" @click.away="showSettings=false">
-                <button @click="showSettings=!showSettings" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition">
-                    ⚙️ <span x-text="depth==='high-level'?'High':'Low'"></span> · <span x-text="expertise.charAt(0).toUpperCase()+expertise.slice(1)"></span>
-                </button>
-                <div x-show="showSettings" x-transition class="absolute right-0 top-full mt-2 rounded-xl shadow-2xl p-3 space-y-3" style="z-index:9999;background:#030712;border:1px solid #374151;width:220px">
+            <div class="mt-4 px-2" x-show="sidebarOpen">
+                <div class="px-2.5 mb-1.5">
+                    <span class="text-[10px] text-gray-500 uppercase tracking-wider font-medium">Settings</span>
+                </div>
+                <div class="px-2.5 space-y-3">
                     <div>
-                        <p class="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">Depth</p>
+                        <p class="text-[10px] text-gray-500 mb-1">Depth</p>
                         <div class="flex gap-1">
-                            <button @click="depth='high-level'" :class="depth==='high-level'?'bg-purple-600 text-white':'bg-gray-800 text-gray-400 hover:bg-gray-700'" class="flex-1 px-2 py-1.5 rounded-lg text-xs transition">High-level</button>
-                            <button @click="depth='low-level'" :class="depth==='low-level'?'bg-purple-600 text-white':'bg-gray-800 text-gray-400 hover:bg-gray-700'" class="flex-1 px-2 py-1.5 rounded-lg text-xs transition">Low-level</button>
+                            <button @click="depth='high-level'" :class="depth==='high-level'?'bg-purple-600 text-white':'bg-gray-800 text-gray-400 hover:bg-gray-700'" class="flex-1 px-2 py-1 rounded text-[11px] transition">High</button>
+                            <button @click="depth='low-level'" :class="depth==='low-level'?'bg-purple-600 text-white':'bg-gray-800 text-gray-400 hover:bg-gray-700'" class="flex-1 px-2 py-1 rounded text-[11px] transition">Low</button>
                         </div>
                     </div>
                     <div>
-                        <p class="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">Expertise</p>
-                        <div class="grid grid-cols-3 gap-1">
-                            <button @click="expertise='beginner'" :class="expertise==='beginner'?'bg-purple-600 text-white':'bg-gray-800 text-gray-400 hover:bg-gray-700'" class="px-1 py-1.5 rounded-lg text-[11px] transition text-center">Beginner</button>
-                            <button @click="expertise='amateur'" :class="expertise==='amateur'?'bg-purple-600 text-white':'bg-gray-800 text-gray-400 hover:bg-gray-700'" class="px-1 py-1.5 rounded-lg text-[11px] transition text-center">Amateur</button>
-                            <button @click="expertise='expert'" :class="expertise==='expert'?'bg-purple-600 text-white':'bg-gray-800 text-gray-400 hover:bg-gray-700'" class="px-1 py-1.5 rounded-lg text-[11px] transition text-center">Expert</button>
+                        <p class="text-[10px] text-gray-500 mb-1">Expertise</p>
+                        <div class="flex flex-col gap-1">
+                            <button @click="expertise='beginner'" :class="expertise==='beginner'?'bg-purple-600 text-white':'bg-gray-800 text-gray-400 hover:bg-gray-700'" class="px-2 py-1 rounded text-[11px] transition text-center">Beginner</button>
+                            <button @click="expertise='amateur'" :class="expertise==='amateur'?'bg-purple-600 text-white':'bg-gray-800 text-gray-400 hover:bg-gray-700'" class="px-2 py-1 rounded text-[11px] transition text-center">Amateur</button>
+                            <button @click="expertise='expert'" :class="expertise==='expert'?'bg-purple-600 text-white':'bg-gray-800 text-gray-400 hover:bg-gray-700'" class="px-2 py-1 rounded text-[11px] transition text-center">Expert</button>
                         </div>
                     </div>
+                    <button @click="saveRepo()" :disabled="showSavedCheck" class="w-full text-xs bg-gray-800 hover:bg-gray-700 disabled:bg-gray-800 text-gray-300 px-2.5 py-1.5 rounded-lg transition">
+                        <span x-show="showSavedCheck" class="text-green-400">✓ Saved</span>
+                        <span x-show="!showSavedCheck">💾 Save Repo</span>
+                    </button>
                 </div>
             </div>
         </template>
-        <!-- Save repo button -->
-        <template x-if="repoReady && user">
-            <button @click="saveRepo()" :disabled="showSavedCheck" class="text-xs bg-gray-800 hover:bg-gray-700 disabled:bg-gray-800 text-gray-300 px-2.5 py-1.5 rounded-lg transition">
-                <span x-show="showSavedCheck" class="text-green-400">✓ Saved</span>
-                <span x-show="!showSavedCheck">💾 Save</span>
-            </button>
-        </template>
-        <!-- Token balance -->
+    </div>
+
+    <!-- Sidebar footer -->
+    <div class="shrink-0 border-t border-gray-800 p-2 space-y-0.5">
         <template x-if="user">
-            <button @click="showTokenShop=true" class="text-xs bg-gray-800 hover:bg-gray-700 text-yellow-400 px-2.5 py-1.5 rounded-lg transition">
-                🪙 <span x-text="userTokens"></span>
-            </button>
-        </template>
-        <!-- Auth -->
-        <template x-if="user">
-            <div class="relative" x-data="{showUserMenu: false}" @click.away="showUserMenu=false">
-                <button @click="showUserMenu=!showUserMenu" class="flex items-center gap-1.5 hover:opacity-80 transition">
-                    <img :src="user.avatar_url" class="w-6 h-6 rounded-full">
+            <div>
+                <button @click="showTokenShop=true" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-yellow-400 hover:bg-gray-800 transition" :title="sidebarOpen?'':'Tokens'">
+                    <span class="shrink-0 w-5 text-center">🪙</span>
+                    <span x-show="sidebarOpen" x-text="userTokens + ' tokens'"></span>
                 </button>
-                <div x-show="showUserMenu" x-transition class="absolute right-0 top-full mt-2 w-40 bg-gray-950 border border-gray-700 rounded-xl shadow-2xl z-50 overflow-hidden" style="opacity:1;backdrop-filter:none">
-                    <div class="px-3 py-2 border-b border-gray-800">
-                        <p class="text-xs text-white font-medium" x-text="user.username"></p>
-                    </div>
-                    <button @click="showApiKeyModal=true; showUserMenu=false" class="w-full text-left px-3 py-2 text-xs text-gray-400 hover:bg-gray-800 hover:text-white transition">API Key</button>
-                    <a href="/auth/logout" class="block px-3 py-2 text-xs text-gray-400 hover:bg-gray-800 hover:text-white transition">Logout</a>
+                <button @click="showApiKeyModal=true" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-gray-400 hover:bg-gray-800 hover:text-white transition" :title="sidebarOpen?'':'API Key'">
+                    <span class="shrink-0 w-5 text-center">🔑</span>
+                    <span x-show="sidebarOpen">API Key</span>
+                </button>
+                <div x-show="sidebarOpen" class="flex items-center gap-2 px-2.5 py-2">
+                    <img :src="user.avatar_url" class="w-5 h-5 rounded-full shrink-0">
+                    <span class="text-xs text-gray-300 truncate flex-1" x-text="user.username"></span>
+                    <a href="/auth/logout" class="text-[10px] text-gray-500 hover:text-red-400 transition">↗</a>
+                </div>
+                <div x-show="!sidebarOpen" class="flex justify-center py-2">
+                    <img :src="user.avatar_url" class="w-5 h-5 rounded-full" :title="user.username">
                 </div>
             </div>
         </template>
         <template x-if="!user && authChecked">
-            <button @click="showAuthModal=true" class="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg">
-                Sign in
+            <button @click="showAuthModal=true" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs bg-purple-600 hover:bg-purple-500 text-white transition" :title="sidebarOpen?'':'Sign in'">
+                <span class="shrink-0 w-5 text-center">👤</span>
+                <span x-show="sidebarOpen">Sign in</span>
             </button>
         </template>
-        <button @click="restartTour()" class="text-xs text-gray-500 hover:text-purple-400 w-6 h-6 flex items-center justify-center rounded-full border border-gray-700 hover:border-purple-500 transition" title="Help tour">?</button>
+        <button @click="restartTour()" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-gray-500 hover:bg-gray-800 hover:text-purple-400 transition" :title="sidebarOpen?'':'Help'">
+            <span class="shrink-0 w-5 text-center">?</span>
+            <span x-show="sidebarOpen">Help Tour</span>
+        </button>
     </div>
+</aside>
+
+<!-- Main content area -->
+<div class="flex-1 flex flex-col min-w-0">
+
+<!-- Slim top bar (repo info only) -->
+<div class="h-10 border-b border-gray-800 flex items-center px-4 gap-3 shrink-0 bg-gray-950">
+    <template x-if="repoData.name">
+        <div class="flex items-center gap-3 text-sm text-gray-400">
+            <span class="text-white font-medium" x-text="repoData.name"></span>
+            <span class="text-xs" x-text="repoData.file_count + ' files'"></span>
+            <span class="text-xs" x-text="Object.keys(repoData.languages||{}).slice(0,3).join(', ')"></span>
+        </div>
+    </template>
 </div>
 
 <!-- Ad banner (free users only) -->
@@ -919,7 +949,8 @@
     </div>
 </template>
 
-</div>
+</div><!-- /main content area -->
+</div><!-- /flex-row -->
 
 <script>
 function repolm() {
@@ -1024,6 +1055,7 @@ function repolm() {
         // Concept Lab state
         showConceptLab: false,
         showApiKeyModal: false,
+        sidebarOpen: true,
         apiKey: null,
         apiKeyVisible: false,
         apiKeyCopied: false,
@@ -1076,6 +1108,10 @@ function repolm() {
             this._healthInterval = setInterval(() => this.checkServerHealth(), 30000);
             this.checkServerHealth();
             this.checkAuth();
+            // Cmd+B / Ctrl+B to toggle sidebar
+            document.addEventListener('keydown', (e) => {
+                if ((e.metaKey || e.ctrlKey) && e.key === 'b') { e.preventDefault(); this.sidebarOpen = !this.sidebarOpen; }
+            });
             console.log('[RepoLM] init() complete');
             const params = new URLSearchParams(window.location.search);
             const exSlug = params.get('example');
