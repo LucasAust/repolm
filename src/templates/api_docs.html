@@ -104,6 +104,13 @@ details[open] summary{margin-bottom:.5rem}
   <a href="#errors">Errors</a>
 </nav>
 
+<!-- Mobile header (hidden on desktop) -->
+<div class="mobile-nav" style="display:none;position:sticky;top:0;z-index:50;background:var(--bg-secondary);border-bottom:1px solid var(--border);padding:.75rem 1rem;align-items:center;gap:1rem">
+  <a href="/" style="color:var(--text-secondary);font-size:.85rem;text-decoration:none;background:var(--bg-tertiary);padding:.35rem .75rem;border-radius:6px">&larr; Home</a>
+  <span style="font-weight:700;font-size:.95rem"><span style="color:var(--purple-accent)">Repo</span>LM API</span>
+</div>
+<style>@media(max-width:768px){.mobile-nav{display:flex!important}}</style>
+
 <!-- Main content -->
 <div class="main">
 
@@ -503,7 +510,7 @@ print(resp.json()["content"])</pre>
 </section>
 
 <p style="color:var(--text-muted);font-size:.8rem;border-top:1px solid var(--border);padding-top:1.5rem">
-  Questions? Reach out at <a href="mailto:support@repolm.com" style="color:var(--purple-accent)">support@repolm.com</a>
+  Questions? Reach out at <a href="mailto:lucas@iqventoryllc.com" style="color:var(--purple-accent)">lucas@iqventoryllc.com</a>
 </p>
 
 </div>
