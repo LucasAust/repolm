@@ -966,7 +966,7 @@ function repolm() {
             // old repoId, broken connections) when the page is restored from bfcache.
             window.addEventListener('unload', () => {});
             window.addEventListener('pageshow', (e) => {
-                if (e.persisted && !this.generating && !this.loadingRepo) {
+                if (e.persisted && !this.generating && !this.loadingRepo && !this.repoReady) {
                     console.log('[RepoLM] bfcache detected, reloading');
                     window.location.href = '/app?t=' + Date.now();
                     return;
