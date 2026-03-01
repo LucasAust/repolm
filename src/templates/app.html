@@ -58,6 +58,7 @@
 /* Mobile responsive */
 @media(max-width:767px){
   .desktop-only{display:none!important}
+  .desktop-tabs{display:none!important}
   .mobile-sidebar{position:fixed;top:0;left:0;bottom:0;width:280px;z-index:60;background:#09090b;border-right:1px solid #1f2937;transform:translateX(-100%);transition:transform 0.3s ease}
   .mobile-sidebar.open{transform:translateX(0)}
   .mobile-generate{position:fixed;top:0;right:0;bottom:0;width:300px;z-index:60;background:#09090b;border-left:1px solid #1f2937;transform:translateX(100%);transition:transform 0.3s ease}
@@ -69,6 +70,19 @@
   .mobile-tab-bar button.active{color:#a78bfa}
   .mobile-tab-bar .tab-icon{font-size:20px}
   .main-layout{padding-bottom:56px}
+  /* Immersive: stack vertically on mobile */
+  .immersive-layout{flex-direction:column!important}
+  .immersive-layout .immersive-code{max-height:40vh;overflow-y:auto}
+  .immersive-layout .immersive-panel{width:100%!important;border-left:none!important;border-top:1px solid #1f2937}
+  /* Viewer action buttons: wrap on mobile */
+  .viewer-actions{flex-wrap:wrap;gap:4px!important}
+  .viewer-actions button,.viewer-actions span{font-size:10px!important;padding:4px 8px!important}
+  /* Slide controls compact */
+  .slide-nav{flex-wrap:wrap;justify-content:center;gap:4px!important}
+  .slide-nav button{padding:4px 10px!important;font-size:11px!important}
+  /* PPTX banner compact */
+  .pptx-banner{flex-direction:column;gap:8px;text-align:center}
+  .pptx-banner button{width:100%}
 }
 @media(min-width:768px){
   .mobile-tab-bar{display:none!important}
@@ -665,7 +679,7 @@
 
         <!-- CENTER: Chat or File viewer -->
         <div class="flex-1 flex flex-col min-w-0">
-            <div class="flex h-[41px] border-b border-gray-800 px-4 shrink-0">
+            <div class="flex h-[41px] border-b border-gray-800 px-4 shrink-0 desktop-tabs">
                 <button @click="mode='chat'" :class="mode==='chat'?'border-purple-500 text-purple-400':'border-transparent text-gray-500 hover:text-gray-300'" class="px-4 py-2 text-sm font-medium border-b-2 transition">💬 Chat</button>
                 <button @click="mode='viewer'" :class="mode==='viewer'?'border-purple-500 text-purple-400':'border-transparent text-gray-500 hover:text-gray-300'" class="px-4 py-2 text-sm font-medium border-b-2 transition">📄 Viewer</button>
                 <button @click="mode='immersive'" x-show="currentFile" :class="mode==='immersive'?'border-purple-500 text-purple-400':'border-transparent text-gray-500 hover:text-gray-300'" class="px-4 py-2 text-sm font-medium border-b-2 transition">🔍 Immersive</button>
@@ -722,7 +736,7 @@
                     <div>
                         <div class="flex items-center justify-between mb-3">
                             <h3 class="text-sm font-mono text-gray-300" x-text="viewingGenerated ? viewingGenerated.label : currentFile"></h3>
-                            <div class="flex gap-2">
+                            <div class="flex gap-2 viewer-actions">
                                 <!-- Copy button -->
                                 <button @click="copyContent()" class="text-xs text-gray-500 hover:text-purple-400 bg-gray-900 border border-gray-800 px-3 py-1.5 rounded-lg transition flex items-center gap-1">
                                     <span x-text="copyLabel">📋 Copy</span>
@@ -754,7 +768,7 @@
                         <template x-if="viewingGenerated && viewingGenerated.kind==='slides' && parsedSlides.length > 0">
                             <div @keydown.window="handleSlideKey($event)">
                                 <!-- PPTX download banner -->
-                                <div class="mb-4 bg-gradient-to-r from-purple-900/40 to-indigo-900/40 border border-purple-700/50 rounded-xl p-4 flex items-center justify-between">
+                                <div class="mb-4 bg-gradient-to-r from-purple-900/40 to-indigo-900/40 border border-purple-700/50 rounded-xl p-4 flex items-center justify-between pptx-banner">
                                     <div class="flex items-center gap-3">
                                         <span class="text-3xl">📊</span>
                                         <div>
@@ -768,29 +782,29 @@
                                     </button>
                                 </div>
                                 <!-- Slide navigation -->
-                                <div class="flex items-center justify-between mb-4">
+                                <div class="flex items-center justify-between mb-4 slide-nav">
                                     <div class="flex items-center gap-2">
                                         <button @click="prevSlide()" :disabled="currentSlide===0" class="bg-gray-800 hover:bg-gray-700 disabled:opacity-30 text-white px-3 py-1.5 rounded-lg text-sm transition">← Prev</button>
                                         <span class="text-sm text-gray-400"><span x-text="currentSlide+1"></span> / <span x-text="parsedSlides.length"></span></span>
                                         <button @click="nextSlide()" :disabled="currentSlide>=parsedSlides.length-1" class="bg-gray-800 hover:bg-gray-700 disabled:opacity-30 text-white px-3 py-1.5 rounded-lg text-sm transition">Next →</button>
-                                        <input type="number" min="1" :max="parsedSlides.length" placeholder="#" @keydown.enter="goToSlide($event.target.value); $event.target.value=''" class="w-14 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-xs text-center text-white focus:outline-none focus:border-purple-500">
+                                        <input type="number" min="1" :max="parsedSlides.length" placeholder="#" @keydown.enter="goToSlide($event.target.value); $event.target.value=''" class="w-14 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-xs text-center text-white focus:outline-none focus:border-purple-500 hidden md:block">
                                     </div>
                                     <div class="flex items-center gap-2">
                                         <button @click="slideFullscreen=!slideFullscreen" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg transition">⛶ Fullscreen</button>
                                     </div>
                                 </div>
-                                <div class="bg-gray-900 border border-gray-700 rounded-2xl p-8 min-h-[400px] flex flex-col justify-center shadow-lg touch-swipe"
+                                <div class="bg-gray-900 border border-gray-700 rounded-2xl p-4 md:p-8 min-h-[200px] md:min-h-[400px] flex flex-col justify-center shadow-lg touch-swipe"
                                     style="aspect-ratio:16/9;max-height:70vh"
                                     @touchstart="handleTouchStart($event)" @touchend="handleTouchEnd($event)">
                                     <div class="prose prose-invert prose-lg max-w-none slide-animate" x-html="renderMd(parsedSlides[currentSlide] || '')"></div>
                                 </div>
                                 <!-- Slide thumbnails -->
-                                <div class="flex gap-2 mt-4 overflow-x-auto pb-2">
+                                <div class="hidden md:flex gap-2 mt-4 overflow-x-auto pb-2">
                                     <template x-for="(s, i) in parsedSlides" :key="i">
                                         <button @click="currentSlide=i" :class="i===currentSlide ? 'border-purple-500 bg-gray-800' : 'border-gray-700 bg-gray-900 hover:bg-gray-800'" class="border rounded-lg p-2 text-[10px] text-gray-400 w-28 h-16 shrink-0 overflow-hidden text-left leading-tight transition" x-text="s.split('\\n')[0].replace(/^#+\\s*/,'').slice(0,40)"></button>
                                     </template>
                                 </div>
-                                <p class="text-[10px] text-gray-600 mt-2">Keys: ←/→ navigate · F fullscreen · Esc exit</p>
+                                <p class="hidden md:block text-[10px] text-gray-600 mt-2">Keys: ←/→ navigate · F fullscreen · Esc exit</p>
                                 <!-- Fullscreen overlay -->
                                 <div x-show="slideFullscreen" class="slide-fullscreen" @keydown.escape.window="slideFullscreen=false">
                                     <div class="slide-content">
@@ -840,19 +854,19 @@
             </div>
 
             <!-- Immersive mode -->
-            <div x-show="mode==='immersive'" class="flex-1 flex overflow-hidden">
-                <div class="flex-1 overflow-y-auto p-4" @mouseup="handleSelection()">
+            <div x-show="mode==='immersive'" class="flex-1 flex overflow-hidden immersive-layout">
+                <div class="flex-1 overflow-y-auto p-4 immersive-code" @mouseup="handleSelection()">
                     <template x-if="currentFile && fileContent">
                         <div>
                             <div class="flex items-center gap-3 mb-3">
                                 <h3 class="text-sm font-mono text-gray-300" x-text="currentFile"></h3>
-                                <span class="text-xs text-purple-400 bg-purple-900/30 px-2 py-0.5 rounded">Highlight text to ask about it</span>
+                                <span class="hidden md:inline text-xs text-purple-400 bg-purple-900/30 px-2 py-0.5 rounded">Highlight text to ask about it</span>
                             </div>
                             <pre class="bg-gray-900 rounded-lg p-4 text-sm overflow-x-auto leading-relaxed"><code x-html="highlightCode(fileContent, currentFile)"></code></pre>
                         </div>
                     </template>
                 </div>
-                <div class="w-80 border-l border-gray-800 flex flex-col shrink-0 h-full min-h-0">
+                <div class="w-80 border-l border-gray-800 flex flex-col shrink-0 h-full min-h-0 immersive-panel">
                     <div class="px-3 py-2 border-b border-gray-800 text-xs text-gray-500 font-medium uppercase tracking-wider" x-text="selectedText ? 'Ask about selection' : 'Ask about this file'"></div>
                     <div x-show="selectedText" class="px-3 py-2 border-b border-gray-800 bg-purple-900/20 flex items-start gap-2">
                         <div class="flex-1 min-w-0">
