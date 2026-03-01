@@ -75,12 +75,13 @@ async def generate(repo_id: str, request: Request):
     expertise = body.get("expertise", "amateur")
     cost = TOKEN_COSTS.get(kind, 10)
     user = await get_current_user(request)
-    if user:
-        balance = await db_async.get_token_balance(user["id"])
-        if balance < cost:
-            return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
-        if not await db_async.spend_tokens(user["id"], cost, f"Generate {kind}"):
-            return JSONResponse({"error": "insufficient_tokens"}, 402)
+    if not user:
+        return JSONResponse({"error": "Authentication required"}, 401)
+    balance = await db_async.get_token_balance(user["id"])
+    if balance < cost:
+        return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
+    if not await db_async.spend_tokens(user["id"], cost, f"Generate {kind}"):
+        return JSONResponse({"error": "insufficient_tokens"}, 402)
     job_id = str(uuid.uuid4())[:8]
     await db_async.create_job(job_id, kind="generate", repo_id=repo_id)
 
@@ -187,7 +188,7 @@ async def generate_stream(repo_id: str, request: Request):
                         _chunks = []
                         stream_task = asyncio.ensure_future(_stream_llm())
                         try:
-                            await asyncio.wait_for(asyncio.shield(stream_task), timeout=300)
+                            await asyncio.wait_for(stream_task, timeout=300)
                         except asyncio.TimeoutError:
                             stream_task.cancel()
                             logger.error("SSE generate stream timed out for repo %s", repo_id)
@@ -318,7 +319,7 @@ async def chat_stream(repo_id: str, request: Request):
 
                 stream_task = asyncio.ensure_future(_stream_chat())
                 try:
-                    await asyncio.wait_for(asyncio.shield(stream_task), timeout=300)
+                    await asyncio.wait_for(stream_task, timeout=300)
                 except asyncio.TimeoutError:
                     stream_task.cancel()
                     logger.error("SSE chat stream timed out for repo %s", repo_id)
@@ -356,12 +357,13 @@ async def chat(repo_id: str, request: Request):
     if not repo or repo["status"] != "ready":
         return JSONResponse({"error": "Repo not ready"}, 400)
     user = await get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Authentication required"}, 401)
     is_immersive = bool(selection and file_context)
     cost = TOKEN_COSTS["immersive"] if is_immersive else TOKEN_COSTS["chat"]
-    if user:
-        balance = await db_async.get_token_balance(user["id"])
-        if balance < cost:
-            return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
+    balance = await db_async.get_token_balance(user["id"])
+    if balance < cost:
+        return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
     if selection and file_context:
         system = get_system_prompt(SELECTION_SYSTEM, depth, expertise)
         file_content = ""
