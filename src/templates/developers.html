@@ -7,16 +7,21 @@
 <meta name="theme-color" content="#09090b">
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="apple-touch-icon" href="/static/favicon.svg">
-<meta name="description" content="RepoLM API — programmatically ingest repos, generate overviews, podcasts, and slides.">
+<meta name="description" content="RepoLM API — analyze any GitHub repo with one API call.">
 <script src="https://cdn.tailwindcss.com"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 <style>
 body{background:#09090b;color:#e5e7eb;font-family:system-ui,-apple-system,sans-serif}
-.code-block{background:#0d1117;border:1px solid #1f2937;border-radius:8px;padding:16px;font-size:13px;overflow-x:auto;font-family:'SF Mono',Consolas,monospace}
+.code-block{position:relative;background:#0d1117;border:1px solid #1f2937;border-radius:8px;padding:16px;font-size:13px;overflow-x:auto;font-family:'SF Mono',Consolas,monospace;line-height:1.6}
+.code-block .copy-btn{position:absolute;top:8px;right:8px;background:#1f2937;border:1px solid #374151;color:#9ca3af;padding:3px 10px;border-radius:4px;font-size:11px;cursor:pointer;transition:all .15s}
+.code-block .copy-btn:hover{border-color:#8b5cf6;color:#c084fc}
 .endpoint{border-left:3px solid #8b5cf6;padding-left:16px;margin-bottom:24px}
 .method{display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:700;margin-right:8px}
-.method-post{background:rgba(52,211,153,0.2);color:#34d399}
+.method-post{background:rgba(124,58,237,0.25);color:#c084fc}
 .method-get{background:rgba(96,165,250,0.2);color:#60a5fa}
+.tab-btn{padding:6px 16px;font-size:13px;font-weight:500;color:#9ca3af;background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
+.tab-btn.active{color:#c084fc;border-bottom-color:#c084fc}
+.tab-panel{display:none}.tab-panel.active{display:block}
 </style>
 </head>
 <body>
@@ -28,24 +33,109 @@ body{background:#09090b;color:#e5e7eb;font-family:system-ui,-apple-system,sans-s
         </div>
         <div class="flex items-center gap-4">
             <a href="/pricing" class="text-sm text-gray-400 hover:text-purple-300">Pricing</a>
-            <a href="/learn" class="text-sm text-gray-400 hover:text-purple-300">Learn</a>
+            <a href="/api/v1/docs" class="text-sm text-gray-400 hover:text-purple-300">Full API Reference</a>
         </div>
     </nav>
 
     <h1 class="text-4xl font-bold mb-4">API <span class="text-purple-400">Documentation</span></h1>
-    <p class="text-lg text-gray-400 mb-8">Programmatically ingest repos and generate educational content.</p>
+    <p class="text-lg text-gray-400 mb-2">Analyze any GitHub repo with one API call.</p>
+    <p class="text-sm text-gray-500 mb-8">One request in, result out. No polling, no job IDs.</p>
 
+    <!-- Quick Start -->
     <div class="bg-gray-900/50 border border-gray-800 rounded-xl p-6 mb-8">
-        <h2 class="text-lg font-semibold mb-2">Authentication</h2>
-        <p class="text-gray-400 text-sm mb-3">All API requests require an API key sent via the <code class="bg-gray-800 px-1 rounded">X-API-Key</code> header.</p>
-        <div class="code-block">
-            <span class="text-gray-500">curl</span> -H <span class="text-green-400">"X-API-Key: rplm_your_key_here"</span> \<br>
-            &nbsp;&nbsp;https://repolm.com/api/v1/repos
+        <h2 class="text-lg font-semibold mb-4">Quick Start</h2>
+
+        <div class="flex gap-0 border-b border-gray-800 mb-0">
+            <button class="tab-btn active" onclick="switchTab(event,'tab-curl')">curl</button>
+            <button class="tab-btn" onclick="switchTab(event,'tab-python')">Python</button>
         </div>
-        <p class="text-xs text-gray-500 mt-3">Generate your API key in <a href="/app" class="text-purple-400">Settings</a>. Rate limits depend on your plan.</p>
+
+        <div id="tab-curl" class="tab-panel active pt-4">
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<span class="text-gray-500">curl</span> -X POST https://repolm.com/api/v1/analyze \
+  -H <span class="text-green-400">"X-API-Key: YOUR_API_KEY"</span> \
+  -H <span class="text-green-400">"Content-Type: application/json"</span> \
+  -d <span class="text-green-400">'{"url": "https://github.com/fastapi/fastapi"}'</span>
+            </div>
+        </div>
+
+        <div id="tab-python" class="tab-panel pt-4">
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<span class="text-purple-300">import</span> requests
+
+resp = requests.post(<span class="text-green-400">"https://repolm.com/api/v1/analyze"</span>,
+    headers={<span class="text-green-400">"X-API-Key"</span>: <span class="text-green-400">"YOUR_API_KEY"</span>},
+    json={
+        <span class="text-green-400">"url"</span>: <span class="text-green-400">"https://github.com/fastapi/fastapi"</span>,
+        <span class="text-green-400">"kind"</span>: <span class="text-green-400">"overview"</span>,
+        <span class="text-green-400">"depth"</span>: <span class="text-green-400">"high-level"</span>,
+        <span class="text-green-400">"expertise"</span>: <span class="text-green-400">"intermediate"</span>
+    })
+
+print(resp.json()[<span class="text-green-400">"content"</span>])
+            </div>
+        </div>
+
+        <p class="text-xs text-gray-500 mt-3">⏱ Blocks until the result is ready (typically 30–90 seconds). No polling needed.</p>
     </div>
 
+    <!-- Authentication -->
     <div class="bg-gray-900/50 border border-gray-800 rounded-xl p-6 mb-8">
+        <h2 class="text-lg font-semibold mb-2">Authentication</h2>
+        <p class="text-gray-400 text-sm mb-3">All requests require an <code class="bg-gray-800 px-1.5 py-0.5 rounded text-green-400 text-xs">X-API-Key</code> header.</p>
+        <p class="text-xs text-gray-500">Generate your API key in the app: click your avatar → API Key. <a href="/app" class="text-purple-400">Open app →</a></p>
+    </div>
+
+    <!-- Main Endpoint -->
+    <h2 class="text-2xl font-bold mb-6">Endpoint</h2>
+
+    <div class="endpoint">
+        <h3 class="text-lg font-semibold mb-2">
+            <span class="method method-post">POST</span>/api/v1/analyze
+            <span class="text-xs text-green-400 font-semibold ml-2">RECOMMENDED</span>
+        </h3>
+        <p class="text-sm text-gray-400 mb-4">Analyze a GitHub repo and get the result in a single request. Handles everything automatically.</p>
+
+        <p class="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-2">Request Body</p>
+        <div class="code-block mb-4">
+{
+  <span class="text-purple-300">"url"</span>: <span class="text-green-400">"https://github.com/fastapi/fastapi"</span>,   <span class="text-gray-600">// required</span>
+  <span class="text-purple-300">"kind"</span>: <span class="text-green-400">"overview"</span>,    <span class="text-gray-600">// overview | podcast | slides</span>
+  <span class="text-purple-300">"depth"</span>: <span class="text-green-400">"high-level"</span>,  <span class="text-gray-600">// high-level | in-depth</span>
+  <span class="text-purple-300">"expertise"</span>: <span class="text-green-400">"amateur"</span>  <span class="text-gray-600">// amateur | intermediate | expert</span>
+}
+        </div>
+
+        <p class="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-2">Response</p>
+        <div class="code-block mb-4">
+{
+  <span class="text-purple-300">"url"</span>: <span class="text-green-400">"https://github.com/fastapi/fastapi"</span>,
+  <span class="text-purple-300">"kind"</span>: <span class="text-green-400">"overview"</span>,
+  <span class="text-purple-300">"content"</span>: <span class="text-green-400">"# FastAPI Overview\n\nFastAPI is a modern..."</span>,
+  <span class="text-purple-300">"token_cost"</span>: <span class="text-yellow-400">4</span>
+}
+        </div>
+
+        <p class="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-2">Token Costs</p>
+        <table class="w-full text-sm mb-2">
+            <thead><tr class="text-gray-500 text-left text-xs"><th class="pb-2">Kind</th><th class="pb-2">Cost</th></tr></thead>
+            <tbody class="text-gray-300">
+                <tr><td class="py-1"><code class="text-xs">overview</code></td><td>4 tokens</td></tr>
+                <tr><td class="py-1"><code class="text-xs">slides</code></td><td>6 tokens</td></tr>
+                <tr><td class="py-1"><code class="text-xs">podcast</code></td><td>9 tokens</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="endpoint">
+        <h3 class="text-lg font-semibold mb-2"><span class="method method-get">GET</span>/api/v1/usage</h3>
+        <p class="text-sm text-gray-400 mb-3">Check your token balance and API usage stats.</p>
+    </div>
+
+    <!-- Rate Limits -->
+    <div class="bg-gray-900/50 border border-gray-800 rounded-xl p-6 mb-8 mt-8">
         <h2 class="text-lg font-semibold mb-2">Rate Limits</h2>
         <table class="w-full text-sm">
             <thead><tr class="text-gray-500 text-left"><th class="pb-2">Plan</th><th class="pb-2">Calls/Day</th><th class="pb-2">Price</th></tr></thead>
@@ -57,74 +147,45 @@ body{background:#09090b;color:#e5e7eb;font-family:system-ui,-apple-system,sans-s
         </table>
     </div>
 
-    <h2 class="text-2xl font-bold mb-6">Endpoints</h2>
-
-    <div class="endpoint">
-        <h3 class="text-lg font-semibold mb-2"><span class="method method-post">POST</span>/api/v1/repos</h3>
-        <p class="text-sm text-gray-400 mb-3">Ingest a GitHub/GitLab repository. Costs 5 tokens.</p>
-        <div class="code-block mb-3">
-{<br>
-&nbsp;&nbsp;<span class="text-purple-300">"url"</span>: <span class="text-green-400">"https://github.com/user/repo"</span><br>
-}
-        </div>
-        <p class="text-xs text-gray-500">Response: <code>{"repo_id": "abc12345", "token_cost": 5}</code></p>
+    <!-- Errors -->
+    <div class="bg-gray-900/50 border border-gray-800 rounded-xl p-6 mb-8">
+        <h2 class="text-lg font-semibold mb-3">Errors</h2>
+        <table class="w-full text-sm">
+            <thead><tr class="text-gray-500 text-left text-xs"><th class="pb-2">Status</th><th class="pb-2">Meaning</th></tr></thead>
+            <tbody class="text-gray-400">
+                <tr><td class="py-1.5"><code class="text-red-400">401</code></td><td>Missing or invalid API key</td></tr>
+                <tr><td class="py-1.5"><code class="text-yellow-400">402</code></td><td>Insufficient tokens — buy more or wait for free reset</td></tr>
+                <tr><td class="py-1.5"><code class="text-yellow-400">429</code></td><td>Rate limit exceeded — upgrade plan or wait</td></tr>
+                <tr><td class="py-1.5"><code class="text-gray-400">500</code></td><td>Ingestion or generation failed</td></tr>
+                <tr><td class="py-1.5"><code class="text-gray-400">503</code></td><td>Server busy — retry in a few seconds</td></tr>
+            </tbody>
+        </table>
     </div>
 
-    <div class="endpoint">
-        <h3 class="text-lg font-semibold mb-2"><span class="method method-get">GET</span>/api/v1/repos/{repo_id}</h3>
-        <p class="text-sm text-gray-400 mb-3">Get repo ingestion status and metadata.</p>
-        <p class="text-xs text-gray-500">Response: <code>{"status": "ready", "data": {...}, "file_count": 42}</code></p>
-    </div>
-
-    <div class="endpoint">
-        <h3 class="text-lg font-semibold mb-2"><span class="method method-post">POST</span>/api/v1/repos/{repo_id}/generate</h3>
-        <p class="text-sm text-gray-400 mb-3">Generate content from an ingested repo.</p>
-        <div class="code-block mb-3">
-{<br>
-&nbsp;&nbsp;<span class="text-purple-300">"kind"</span>: <span class="text-green-400">"overview"</span>,  <span class="text-gray-600">// overview | podcast | slides</span><br>
-&nbsp;&nbsp;<span class="text-purple-300">"depth"</span>: <span class="text-green-400">"high-level"</span>,  <span class="text-gray-600">// high-level | low-level</span><br>
-&nbsp;&nbsp;<span class="text-purple-300">"expertise"</span>: <span class="text-green-400">"amateur"</span>  <span class="text-gray-600">// beginner | amateur | expert</span><br>
-}
-        </div>
-        <p class="text-xs text-gray-500">Response: <code>{"job_id": "xyz789", "token_cost": 10}</code></p>
-    </div>
-
-    <div class="endpoint">
-        <h3 class="text-lg font-semibold mb-2"><span class="method method-get">GET</span>/api/v1/jobs/{job_id}</h3>
-        <p class="text-sm text-gray-400 mb-3">Poll job status. When <code>status: "done"</code>, the <code>result</code> field contains the generated content.</p>
-    </div>
-
-    <div class="endpoint">
-        <h3 class="text-lg font-semibold mb-2"><span class="method method-get">GET</span>/api/v1/usage</h3>
-        <p class="text-sm text-gray-400 mb-3">Get your API usage statistics.</p>
-    </div>
-
-    <h2 class="text-2xl font-bold mb-4 mt-12">Quick Start</h2>
-    <div class="code-block">
-<span class="text-gray-500"># 1. Ingest a repo</span><br>
-curl -X POST https://repolm.com/api/v1/repos \<br>
-&nbsp;&nbsp;-H "X-API-Key: $API_KEY" \<br>
-&nbsp;&nbsp;-H "Content-Type: application/json" \<br>
-&nbsp;&nbsp;-d '{"url": "https://github.com/expressjs/express"}'<br>
-<br>
-<span class="text-gray-500"># 2. Poll until ready</span><br>
-curl https://repolm.com/api/v1/repos/abc123 \<br>
-&nbsp;&nbsp;-H "X-API-Key: $API_KEY"<br>
-<br>
-<span class="text-gray-500"># 3. Generate an overview</span><br>
-curl -X POST https://repolm.com/api/v1/repos/abc123/generate \<br>
-&nbsp;&nbsp;-H "X-API-Key: $API_KEY" \<br>
-&nbsp;&nbsp;-H "Content-Type: application/json" \<br>
-&nbsp;&nbsp;-d '{"kind": "overview", "expertise": "beginner"}'<br>
-<br>
-<span class="text-gray-500"># 4. Get the result</span><br>
-curl https://repolm.com/api/v1/jobs/xyz789 \<br>
-&nbsp;&nbsp;-H "X-API-Key: $API_KEY"
+    <!-- Advanced link -->
+    <div class="text-center mt-8 mb-8">
+        <p class="text-sm text-gray-500 mb-2">Need more control? Webhooks, progress tracking, reusing ingested repos?</p>
+        <a href="/api/v1/docs" class="text-purple-400 hover:text-purple-300 text-sm font-medium">View full API reference →</a>
     </div>
 
     <footer class="mt-16 pt-8 border-t border-gray-800 text-center text-gray-600 text-sm">
         <span class="text-purple-400 font-semibold">Repo</span>LM API — <a href="/app" class="text-purple-400">Get your API key →</a>
     </footer>
 </div>
+
+<script>
+function copyCode(btn){
+    const block=btn.closest('.code-block');
+    const text=block.textContent.replace('Copy','').trim();
+    navigator.clipboard.writeText(text).then(()=>{btn.textContent='Copied!';setTimeout(()=>btn.textContent='Copy',2000)});
+}
+function switchTab(e,id){
+    const section=e.target.closest('.bg-gray-900\\/50')||e.target.closest('div');
+    section.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    section.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+    e.target.classList.add('active');
+    document.getElementById(id).classList.add('active');
+}
+</script>
 </body>
 </html>
