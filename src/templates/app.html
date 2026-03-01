@@ -409,11 +409,11 @@
             </div>
         </template>
         <!-- Save repo button -->
-        <template x-if="repoReady && user && !savedDbId">
-            <button @click="saveRepo()" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2.5 py-1.5 rounded-lg transition">💾 Save</button>
-        </template>
-        <template x-if="repoReady && savedDbId">
-            <span class="text-xs text-green-400">✓ Saved</span>
+        <template x-if="repoReady && user">
+            <button @click="saveRepo()" :disabled="savedDbId && !showSavedCheck" class="text-xs bg-gray-800 hover:bg-gray-700 disabled:bg-gray-800 text-gray-300 px-2.5 py-1.5 rounded-lg transition">
+                <span x-show="showSavedCheck" class="text-green-400">✓ Saved</span>
+                <span x-show="!showSavedCheck">💾 Save</span>
+            </button>
         </template>
         <!-- Token balance -->
         <template x-if="user">
@@ -960,6 +960,7 @@ function repolm() {
         authLoading: false,
         savedRepos: [],
         savedDbId: null,
+        showSavedCheck: false,
         showTokenShop: false,
         showInsufficientModal: false,
         insufficientTokensInfo: null,
@@ -1196,6 +1197,8 @@ function repolm() {
                 const data = await res.json();
                 if (data.db_id) {
                     this.savedDbId = data.db_id;
+                    this.showSavedCheck = true;
+                    setTimeout(() => { this.showSavedCheck = false; }, 3000);
                     this.loadSavedRepos();
                 }
             } catch(e) {}
