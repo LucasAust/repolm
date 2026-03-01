@@ -72,6 +72,7 @@
   .main-layout{padding-bottom:56px}
   /* Prevent iOS zoom on input focus */
   input,select,textarea{font-size:16px!important}
+  *{touch-action:manipulation}
   /* iOS safe areas */
   .mobile-tab-bar{padding-bottom:env(safe-area-inset-bottom)}
   /* Immersive mobile: full-screen answer overlay */
@@ -1083,23 +1084,41 @@
 </div><!-- /flex-row -->
 
 <script>
-// iOS keyboard zoom fix: reset scale on blur
+// iOS keyboard zoom fix
 (function() {
-    if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
-        document.addEventListener('focusout', function() {
-            // Reset viewport zoom after keyboard closes
-            setTimeout(function() {
-                var vp = document.querySelector('meta[name=viewport]');
-                if (vp) {
-                    vp.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
-                }
-                // Force scroll reset
-                window.scrollTo(0, 0);
-            }, 100);
-        });
-        // Also prevent zoom via touch
-        document.addEventListener('gesturestart', function(e) { e.preventDefault(); });
+    var isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+    if (!isIOS) return;
+
+    // Nuclear zoom reset: toggle viewport to force Safari to recalculate
+    function resetZoom() {
+        var vp = document.querySelector('meta[name=viewport]');
+        if (!vp) return;
+        // Briefly allow scaling then lock it back — forces Safari to snap back to 1.0
+        vp.setAttribute('content', 'width=device-width, initial-scale=1.0');
+        setTimeout(function() {
+            vp.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no, viewport-fit=cover');
+        }, 50);
     }
+
+    // On any input blur, reset zoom
+    document.addEventListener('focusout', function(e) {
+        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT')) {
+            setTimeout(resetZoom, 150);
+        }
+    });
+
+    // Block pinch zoom
+    document.addEventListener('gesturestart', function(e) { e.preventDefault(); }, {passive: false});
+    document.addEventListener('gesturechange', function(e) { e.preventDefault(); }, {passive: false});
+    document.addEventListener('gestureend', function(e) { e.preventDefault(); }, {passive: false});
+
+    // Block double-tap zoom
+    var lastTap = 0;
+    document.addEventListener('touchend', function(e) {
+        var now = Date.now();
+        if (now - lastTap < 300) { e.preventDefault(); }
+        lastTap = now;
+    }, {passive: false});
 })();
 
 function repolm() {
