@@ -24,7 +24,7 @@ body{background:#09090b;color:#e5e7eb;font-family:system-ui,-apple-system,sans-s
 <!-- Nav -->
 <nav class="max-w-6xl mx-auto px-6 py-5 flex items-center justify-between">
     <div class="flex items-center gap-4">
-        <a href="/app" class="text-sm text-gray-400 hover:text-white transition flex items-center gap-1.5">← Back to App</a>
+        <a :href="backUrl" class="text-sm text-gray-400 hover:text-white transition flex items-center gap-1.5" x-data="{backUrl: document.referrer.includes('/app') ? '/app' : '/'}" x-text="document.referrer.includes('/app') ? '← Back to App' : '← Home'"></a>
         <a href="/" class="text-xl font-bold"><span class="text-purple-400">Repo</span>LM</a>
     </div>
     <div class="flex items-center gap-4">
