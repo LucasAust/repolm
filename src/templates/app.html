@@ -698,7 +698,7 @@
 
             <!-- Chat mode -->
             <div x-show="mode==='chat'" class="flex-1 flex flex-col min-h-0">
-                <div class="flex-1 overflow-y-auto chat-area p-4 space-y-4" x-ref="chatScroll">
+                <div class="flex-1 overflow-y-auto chat-area p-4 pb-20 md:pb-4 space-y-4" x-ref="chatScroll">
                     <template x-if="messages.length===0">
                         <div class="text-center text-gray-500 mt-20">
                             <p class="text-lg mb-2">Ask anything about <span class="text-white" x-text="repoData.name || exampleData.name"></span></p>
@@ -721,7 +721,8 @@
                         </div>
                     </template>
                 </div>
-                <div class="border-t border-gray-800 p-4">
+                <!-- Desktop chat input -->
+                <div class="hidden md:block border-t border-gray-800 p-4">
                     <div class="flex gap-2">
                         <input x-model="chatInput" type="text" placeholder="Ask about this codebase..."
                             @keydown.enter="sendChat()"
@@ -729,7 +730,6 @@
                             class="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 disabled:opacity-50">
                         <button @click="sendChat()" :disabled="chatLoading " class="bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 px-4 py-2.5 rounded-lg text-sm">Send (1 🪙)</button>
                     </div>
-<!-- chat always enabled -->
                 </div>
             </div>
 
@@ -909,6 +909,17 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Mobile chat input (fixed at bottom) -->
+        <div x-show="mode==='chat'" class="md:hidden" style="position:fixed;bottom:56px;left:0;right:0;z-index:45;background:#09090b;border-top:1px solid #1f2937;padding:10px 12px;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px))">
+            <div class="flex gap-2">
+                <input x-model="chatInput" type="text" placeholder="Ask about this codebase..."
+                    @keydown.enter="sendChat()"
+                    :disabled="chatLoading"
+                    class="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 disabled:opacity-50">
+                <button @click="sendChat()" :disabled="chatLoading" class="bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium">Send</button>
             </div>
         </div>
 
