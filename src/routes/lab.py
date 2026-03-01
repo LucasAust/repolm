@@ -75,7 +75,7 @@ async def concept_lab(request: Request):
             repo = parse_generated_repo(full_text)
             if repo:
                 repo_id = str(uuid.uuid4())[:8]
-                                repo_entry = {
+                repo_entry = {
                     "status": "ready", "message": "Ready",
                     "data": repo["data"], "files": repo["files"], "text": repo["text"],
                 }
