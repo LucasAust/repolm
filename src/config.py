@@ -100,12 +100,12 @@ os.makedirs(EXAMPLES_DIR, exist_ok=True)
 
 DEPTH_PROMPTS = {
     "high-level": "Focus on architecture, design decisions, and the big picture. Skip implementation details.",
-    "low-level": "Go deep into implementation details, algorithms, data structures, and code paths.",
+    "in-depth": "Go deep into implementation details, algorithms, data structures, and code paths.",
 }
 
 EXPERTISE_PROMPTS = {
-    "beginner": "Explain like I'm a first-year CS student. Use simple analogies, define all technical terms, and go step by step. Assume I know basic programming but nothing advanced. Use MINIMAL code snippets — only when absolutely necessary, and keep them very short (1-3 lines max). Prefer plain English explanations, diagrams, and analogies over code.",
-    "amateur": "Explain for someone who codes regularly but may not know this domain well. You can use technical terms but explain domain-specific concepts. Include a MODERATE amount of code snippets — show key functions and patterns but don't dump entire files. Balance code with explanation, roughly 30-40% code.",
+    "amateur": "Explain like I'm a first-year CS student. Use simple analogies, define all technical terms, and go step by step. Assume I know basic programming but nothing advanced. Use MINIMAL code snippets — only when absolutely necessary, and keep them very short (1-3 lines max). Prefer plain English explanations, diagrams, and analogies over code.",
+    "intermediate": "Explain for someone who codes regularly but may not know this domain well. You can use technical terms but explain domain-specific concepts. Include a MODERATE amount of code snippets — show key functions and patterns but don't dump entire files. Balance code with explanation, roughly 30-40% code.",
     "expert": "Explain for an experienced software engineer. Be concise, use proper terminology, skip basics. Focus on interesting design decisions and tradeoffs. Be CODE-HEAVY — show extensive code snippets, full function implementations, type signatures, and internal logic. Let the code speak. 60-70% of your response should be actual code with brief annotations.",
 }
 
@@ -257,7 +257,7 @@ def get_system_prompt(template, depth="high-level", expertise="amateur"):
         expertise=EXPERTISE_PROMPTS.get(expertise, ""),
     )
     if template is PODCAST_SYSTEM:
-        if expertise == "beginner":
+        if expertise == "amateur":
             result += PODCAST_BEGINNER_EXTRA
         elif expertise == "expert":
             result += PODCAST_EXPERT_EXTRA

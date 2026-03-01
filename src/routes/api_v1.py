@@ -151,6 +151,8 @@ async def api_get_job(job_id: str, request: Request):
         return err
     job = state.jobs.get(job_id)
     if not job:
+        job = await db_async.get_job(job_id)
+    if not job:
         return JSONResponse({"error": "Not found"}, 404)
     return job
 

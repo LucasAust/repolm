@@ -334,7 +334,7 @@ html{overflow:hidden;position:fixed;width:100%;height:100%}
                 <div class="flex-1">
                     <label class="text-xs text-gray-400 mb-1 block">Difficulty</label>
                     <select x-model="conceptDifficulty" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500">
-                        <option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option>
+                        <option value="amateur">Amateur</option><option value="intermediate">Intermediate</option><option value="expert">Expert</option>
                     </select>
                 </div>
             </div>
@@ -451,14 +451,14 @@ html{overflow:hidden;position:fixed;width:100%;height:100%}
                         <p class="text-[10px] text-gray-500 mb-1">Depth</p>
                         <div class="flex gap-1">
                             <button @click="depth='high-level'" :class="depth==='high-level'?'bg-purple-600 text-white':'bg-gray-800 text-gray-400 hover:bg-gray-700'" class="flex-1 px-2 py-1 rounded text-[11px] transition">High</button>
-                            <button @click="depth='low-level'" :class="depth==='low-level'?'bg-purple-600 text-white':'bg-gray-800 text-gray-400 hover:bg-gray-700'" class="flex-1 px-2 py-1 rounded text-[11px] transition">Low</button>
+                            <button @click="depth='in-depth'" :class="depth==='in-depth'?'bg-purple-600 text-white':'bg-gray-800 text-gray-400 hover:bg-gray-700'" class="flex-1 px-2 py-1 rounded text-[11px] transition">In-depth</button>
                         </div>
                     </div>
                     <div>
                         <p class="text-[10px] text-gray-500 mb-1">Expertise</p>
                         <div class="flex flex-col gap-1">
-                            <button @click="expertise='beginner'" :class="expertise==='beginner'?'bg-purple-600 text-white':'bg-gray-800 text-gray-400 hover:bg-gray-700'" class="px-2 py-1 rounded text-[11px] transition text-center">Beginner</button>
                             <button @click="expertise='amateur'" :class="expertise==='amateur'?'bg-purple-600 text-white':'bg-gray-800 text-gray-400 hover:bg-gray-700'" class="px-2 py-1 rounded text-[11px] transition text-center">Amateur</button>
+                            <button @click="expertise='intermediate'" :class="expertise==='intermediate'?'bg-purple-600 text-white':'bg-gray-800 text-gray-400 hover:bg-gray-700'" class="px-2 py-1 rounded text-[11px] transition text-center">Intermediate</button>
                             <button @click="expertise='expert'" :class="expertise==='expert'?'bg-purple-600 text-white':'bg-gray-800 text-gray-400 hover:bg-gray-700'" class="px-2 py-1 rounded text-[11px] transition text-center">Expert</button>
                         </div>
                     </div>
@@ -1219,7 +1219,7 @@ function repolm() {
         tourStep: 0,
         tourSteps: [
             {title: 'Paste a Repo URL', desc: 'Enter any GitHub or GitLab repo URL to get started.', target: 'tour-url-input'},
-            {title: 'Choose Your Level', desc: 'Set depth (high/low) and expertise (beginner to expert) — content adapts to you.', target: 'tour-level'},
+            {title: 'Choose Your Level', desc: 'Set depth (high-level/in-depth) and expertise (amateur to expert) — content adapts to you.', target: 'tour-level'},
             {title: 'Generate Content', desc: 'Create overviews, podcast scripts, or slide decks from the code.', target: 'tour-generate'},
             {title: 'Chat with the Code', desc: 'Ask questions, highlight code in Immersive mode, and explore interactively.', target: 'tour-chat'},
         ],

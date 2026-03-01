@@ -97,9 +97,9 @@ def run_ingest(repo_id, url, webhook_url=None, api_key=None):
             fire_webhook(webhook_url, build_completed_payload(repo_id, json.dumps(repo_data)), api_key)
     except Exception as e:
         logger.exception("Ingest failed for %s", url)
-        db_async.sync_update_job(repo_id, status="error", message=str(e))
+        db_async.sync_update_job(repo_id, status="error", message="Ingestion failed. Please try again.")
         if webhook_url and api_key:
-            fire_webhook(webhook_url, build_failed_payload(repo_id, str(e)), api_key)
+            fire_webhook(webhook_url, build_failed_payload(repo_id, "Ingestion failed"), api_key)
 
 
 def run_upload_ingest(repo_id, files_data):
@@ -182,7 +182,7 @@ def run_upload_ingest(repo_id, files_data):
                            result=json.dumps(repo_data))
     except Exception as e:
         logger.exception("Upload ingest failed")
-        db_async.sync_update_job(repo_id, status="error", message=str(e))
+        db_async.sync_update_job(repo_id, status="error", message="Upload processing failed. Please try again.")
 
 
 @router.post("/api/repo")

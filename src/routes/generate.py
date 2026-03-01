@@ -3,6 +3,7 @@ RepoLM — Generate & chat streaming endpoints.
 Uses thread pools and SSE semaphore for concurrency control.
 """
 
+import asyncio
 import json
 import uuid
 import logging
@@ -61,9 +62,9 @@ def run_generate(job_id, repo_id, kind, depth, expertise, webhook_url=None, api_
             fire_webhook(webhook_url, build_completed_payload(job_id, result), api_key)
     except Exception as e:
         logger.exception("Generate failed for job %s", job_id)
-        db_async.sync_update_job(job_id, status="error", message=str(e))
+        db_async.sync_update_job(job_id, status="error", message="Generation failed. Please try again.")
         if webhook_url and api_key:
-            fire_webhook(webhook_url, build_failed_payload(job_id, str(e)), api_key)
+            fire_webhook(webhook_url, build_failed_payload(job_id, "Generation failed"), api_key)
 
 
 @router.post("/api/repo/{repo_id}/generate")
@@ -165,51 +166,71 @@ async def generate_stream(repo_id: str, request: Request):
     async def event_stream():
         try:
             async with sse_semaphore:
-                if cached:
-                    yield sse_format("true", "cached")
-                    chunk_size = 80
-                    for i in range(0, len(cached), chunk_size):
-                        yield sse_format(cached[i:i+chunk_size], "chunk")
-                    yield sse_format("", "done")
-                else:
-                    full_content = ""
-                    async for chunk in async_call_llm_stream(system, prompts[kind]):
-                        full_content += chunk
-                        yield sse_format(chunk, "chunk")
-                    if repo_url and full_content:
-                        content_cache.set_cached(repo_url, kind, depth, expertise, full_content)
-                    if kind == "overview" and full_content and repo_url:
+                try:
+                    if cached:
+                        yield sse_format("true", "cached")
+                        chunk_size = 80
+                        for i in range(0, len(cached), chunk_size):
+                            yield sse_format(cached[i:i+chunk_size], "chunk")
+                        yield sse_format("", "done")
+                    else:
+                        full_content = ""
+
+                        async def _stream_llm():
+                            nonlocal full_content
+                            async for chunk in async_call_llm_stream(system, prompts[kind]):
+                                full_content += chunk
+                                _chunks.append(chunk)
+
+                        _chunks = []
+                        stream_task = asyncio.ensure_future(_stream_llm())
                         try:
-                            import re
-                            match = re.match(r'https?://github\.com/([^/]+)/([^/]+)', repo_url)
-                            if match:
-                                owner, rname = match.group(1), match.group(2).replace('.git', '')
-                                repo_data = repo.get("data", {})
-                                await db_async.save_public_overview(
-                                    owner=owner, repo_name=rname, repo_url=repo_url,
-                                    overview=full_content,
-                                    description=full_content[:200].replace('\n', ' '),
-                                    languages=str(repo_data.get("languages", "")),
-                                    file_count=repo_data.get("file_count", 0),
-                                    depth=depth, expertise=expertise,
-                                )
-                        except Exception:
-                            pass
-                    if user and full_content:
-                        try:
-                            badge_map = {"overview": "first_overview", "podcast": "podcast_pioneer", "slides": "slide_master"}
-                            badge = badge_map.get(kind)
-                            if badge:
-                                new = await db_async.grant_achievement(user["id"], badge)
-                                if new:
-                                    from db import ACHIEVEMENT_DEFS
-                                    defn = ACHIEVEMENT_DEFS.get(badge, {})
-                                    yield sse_format(json.dumps({"badge": badge, "name": defn.get("name", badge), "emoji": defn.get("emoji", "🏆")}), "achievement")
-                        except Exception:
-                            pass
-                    yield sse_format("", "done")
+                            await asyncio.wait_for(asyncio.shield(stream_task), timeout=300)
+                        except asyncio.TimeoutError:
+                            stream_task.cancel()
+                            logger.error("SSE generate stream timed out for repo %s", repo_id)
+                            yield sse_format("Generation timed out. Please try again.", "error")
+                            return
+                        for c in _chunks:
+                            yield sse_format(c, "chunk")
+                        if repo_url and full_content:
+                            content_cache.set_cached(repo_url, kind, depth, expertise, full_content)
+                        if kind == "overview" and full_content and repo_url:
+                            try:
+                                import re
+                                match = re.match(r'https?://github\.com/([^/]+)/([^/]+)', repo_url)
+                                if match:
+                                    owner, rname = match.group(1), match.group(2).replace('.git', '')
+                                    repo_data = repo.get("data", {})
+                                    await db_async.save_public_overview(
+                                        owner=owner, repo_name=rname, repo_url=repo_url,
+                                        overview=full_content,
+                                        description=full_content[:200].replace('\n', ' '),
+                                        languages=str(repo_data.get("languages", "")),
+                                        file_count=repo_data.get("file_count", 0),
+                                        depth=depth, expertise=expertise,
+                                    )
+                            except Exception:
+                                pass
+                        if user and full_content:
+                            try:
+                                badge_map = {"overview": "first_overview", "podcast": "podcast_pioneer", "slides": "slide_master"}
+                                badge = badge_map.get(kind)
+                                if badge:
+                                    new = await db_async.grant_achievement(user["id"], badge)
+                                    if new:
+                                        from db import ACHIEVEMENT_DEFS
+                                        defn = ACHIEVEMENT_DEFS.get(badge, {})
+                                        yield sse_format(json.dumps({"badge": badge, "name": defn.get("name", badge), "emoji": defn.get("emoji", "🏆")}), "achievement")
+                            except Exception:
+                                pass
+                        yield sse_format("", "done")
+                except asyncio.TimeoutError:
+                    logger.error("SSE generate stream timed out for repo %s", repo_id)
+                    yield sse_format("Generation timed out. Please try again.", "error")
         except Exception as e:
-            yield sse_format(str(e), "error")
+            logger.exception("Generate stream error for repo %s", repo_id)
+            yield sse_format("Generation failed. Please try again.", "error")
         finally:
             sse_ctx.release()
 
@@ -283,17 +304,33 @@ async def chat_stream(repo_id: str, request: Request):
         try:
             async with sse_semaphore:
                 chunk_count = 0
+                _chunks = []
                 logger.info("Chat stream starting for repo %s (immersive=%s, msgs=%d)", repo_id, is_immersive, len(messages_list))
-                async for chunk in async_call_llm_stream_messages(messages_list):
-                    chunk_count += 1
-                    yield sse_format(chunk, "chunk")
+
+                async def _stream_chat():
+                    nonlocal chunk_count
+                    async for chunk in async_call_llm_stream_messages(messages_list):
+                        chunk_count += 1
+                        _chunks.append(chunk)
+
+                stream_task = asyncio.ensure_future(_stream_chat())
+                try:
+                    await asyncio.wait_for(asyncio.shield(stream_task), timeout=300)
+                except asyncio.TimeoutError:
+                    stream_task.cancel()
+                    logger.error("SSE chat stream timed out for repo %s", repo_id)
+                    yield sse_format("Chat timed out. Please try again.", "error")
+                    return
+
+                for c in _chunks:
+                    yield sse_format(c, "chunk")
                 logger.info("Chat stream done for repo %s — %d chunks", repo_id, chunk_count)
                 new_balance = await db_async.get_token_balance(user["id"]) if user else None
                 yield sse_format(json.dumps({"cost": cost, "balance": new_balance}), "meta")
                 yield sse_format("", "done")
         except Exception as e:
             logger.exception("Chat stream error for repo %s", repo_id)
-            yield sse_format(str(e), "error")
+            yield sse_format("Chat failed. Please try again.", "error")
         finally:
             sse_ctx.release()
 
@@ -343,4 +380,5 @@ async def chat(repo_id: str, request: Request):
         new_balance = await db_async.get_token_balance(user["id"]) if user else None
         return {"response": result, "token_cost": cost, "balance": new_balance}
     except Exception as e:
-        return JSONResponse({"error": f"AI generation failed: {str(e)}"}, 500)
+        logger.exception("Chat generation failed for repo %s", repo_id)
+        return JSONResponse({"error": "Generation failed. Please try again."}, 500)
