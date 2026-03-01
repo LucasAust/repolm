@@ -21,14 +21,14 @@ def validate_config():
 
 # ── Token Costs ──
 TOKEN_COSTS = {
-    "ingest": 5,
-    "overview": 10,
-    "chat": 2,
-    "slides": 15,
-    "podcast": 20,
-    "audio": 30,
-    "immersive": 3,
-    "concept_lab": 50,
+    "ingest": 1,
+    "overview": 3,
+    "chat": 1,
+    "slides": 5,
+    "podcast": 8,
+    "audio": 5,
+    "immersive": 1,
+    "concept_lab": 10,
 }
 
 # ── AdSense ──
@@ -64,7 +64,7 @@ SUBSCRIPTION_TIERS = {
         "name": "Pro",
         "price_cents": 1900,
         "annual_price_cents": 18000,
-        "tokens_per_month": 200,
+        "tokens_per_month": 2000,
         "ads": False,
         "api_access": False,
         "stripe_price_id": os.environ.get("STRIPE_PRICE_PRO_SUB", ""),
@@ -74,7 +74,7 @@ SUBSCRIPTION_TIERS = {
         "name": "Team",
         "price_cents": 4900,
         "annual_price_cents": 46800,
-        "tokens_per_month": 500,
+        "tokens_per_month": 5000,
         "ads": False,
         "api_access": True,
         "stripe_price_id": os.environ.get("STRIPE_PRICE_TEAM_SUB", ""),
@@ -83,9 +83,9 @@ SUBSCRIPTION_TIERS = {
 }
 
 # ── Referral Config ──
-REFERRAL_BONUS_REFERRER = 5
-REFERRAL_BONUS_REFEREE = 5
-DEFAULT_SIGNUP_TOKENS = 10
+REFERRAL_BONUS_REFERRER = 25
+REFERRAL_BONUS_REFEREE = 25
+DEFAULT_SIGNUP_TOKENS = 50
 
 # ── Edge TTS Voices ──
 EDGE_VOICES = {"ALEX": "en-US-AndrewMultilingualNeural", "SAM": "en-US-AvaMultilingualNeural"}

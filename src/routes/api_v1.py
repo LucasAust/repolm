@@ -80,7 +80,7 @@ hr{border:none;border-top:1px solid #1f2937;margin:2rem 0}
 <ul><li>Free: 10 API calls/day</li><li>Pro: 100 API calls/day</li><li>Enterprise: 1,000 API calls/day</li></ul>
 
 <h2>Token Costs</h2>
-<ul><li>Ingest: 10 tokens</li><li>Overview: 25 tokens</li><li>Podcast: 50 tokens</li><li>Slides: 25 tokens</li></ul>
+<ul><li>Ingest: 1 token</li><li>Overview: 3 tokens</li><li>Podcast: 8 tokens</li><li>Slides: 5 tokens</li></ul>
 
 <p style="margin-top:2rem;color:#6b7280;font-size:.8rem">Questions? <a href="mailto:support@repolm.com">support@repolm.com</a></p>
 </body></html>"""

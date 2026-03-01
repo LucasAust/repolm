@@ -20,31 +20,31 @@ if STRIPE_SECRET_KEY:
     stripe.api_key = STRIPE_SECRET_KEY
 
 PACKS = {
-    "starter": {"name": "Starter", "tokens": 50, "price_cents": 500, "price_id": os.environ.get("STRIPE_PRICE_STARTER", "")},
-    "builder": {"name": "Builder", "tokens": 150, "price_cents": 1200, "price_id": os.environ.get("STRIPE_PRICE_BUILDER", "")},
-    "pro": {"name": "Pro", "tokens": 500, "price_cents": 2900, "price_id": os.environ.get("STRIPE_PRICE_PRO", "")},
-    "team": {"name": "Team", "tokens": 2000, "price_cents": 7900, "price_id": os.environ.get("STRIPE_PRICE_TEAM", "")},
+    "starter": {"name": "Starter", "tokens": 500, "price_cents": 500, "price_id": os.environ.get("STRIPE_PRICE_STARTER", "")},
+    "builder": {"name": "Builder", "tokens": 1500, "price_cents": 1200, "price_id": os.environ.get("STRIPE_PRICE_BUILDER", "")},
+    "pro": {"name": "Pro", "tokens": 5000, "price_cents": 2900, "price_id": os.environ.get("STRIPE_PRICE_PRO", "")},
+    "team": {"name": "Team", "tokens": 20000, "price_cents": 7900, "price_id": os.environ.get("STRIPE_PRICE_TEAM", "")},
     "test": {"name": "Test Pack", "tokens": 1000000000, "price_cents": 100, "price_id": os.environ.get("STRIPE_PRICE_TEST", "")},
 }
 
 SUBSCRIPTIONS = {
     "pro_monthly": {
-        "name": "Pro Monthly", "plan": "pro", "tokens_per_month": 200,
+        "name": "Pro Monthly", "plan": "pro", "tokens_per_month": 2000,
         "price_cents": 1900, "interval": "month",
         "price_id": os.environ.get("STRIPE_PRICE_PRO_SUB", ""),
     },
     "pro_annual": {
-        "name": "Pro Annual", "plan": "pro", "tokens_per_month": 200,
+        "name": "Pro Annual", "plan": "pro", "tokens_per_month": 2000,
         "price_cents": 18000, "interval": "year",
         "price_id": os.environ.get("STRIPE_PRICE_PRO_ANNUAL", ""),
     },
     "team_monthly": {
-        "name": "Team Monthly", "plan": "team", "tokens_per_month": 500,
+        "name": "Team Monthly", "plan": "team", "tokens_per_month": 5000,
         "price_cents": 4900, "interval": "month",
         "price_id": os.environ.get("STRIPE_PRICE_TEAM_SUB", ""),
     },
     "team_annual": {
-        "name": "Team Annual", "plan": "team", "tokens_per_month": 500,
+        "name": "Team Annual", "plan": "team", "tokens_per_month": 5000,
         "price_cents": 46800, "interval": "year",
         "price_id": os.environ.get("STRIPE_PRICE_TEAM_ANNUAL", ""),
     },
