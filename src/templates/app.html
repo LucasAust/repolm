@@ -555,6 +555,11 @@
                 <template x-if="!currentFile && !viewingGenerated">
                     <div class="text-center text-gray-500 mt-20">Select a file from the sidebar or generate content</div>
                 </template>
+                <template x-if="currentFile && !viewingGenerated && generated.length > 0">
+                    <button @click="viewGenerated(generated[generated.length-1])" class="w-full mb-2 text-left text-xs bg-purple-900/20 hover:bg-purple-900/30 border border-purple-800/30 rounded-lg px-3 py-2 text-purple-300 transition">
+                        ← Back to generated <span x-text="generated[generated.length-1].kind" class="font-semibold"></span>
+                    </button>
+                </template>
                 <template x-if="currentFile || viewingGenerated">
                     <div>
                         <div class="flex items-center justify-between mb-3">
@@ -1388,6 +1393,10 @@ function repolm() {
         async openFile(path) {
             this.currentFile = path;
             this.fileContent = null;  // trigger skeleton
+            // Preserve last generated item so user can switch back
+            if (this.viewingGenerated) {
+                this._lastGenerated = {kind: this.viewingGenerated.kind, content: this.viewingContent};
+            }
             this.viewingGenerated = null;
             this.audioUrl = null;
             try {
