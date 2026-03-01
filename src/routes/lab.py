@@ -75,10 +75,12 @@ async def concept_lab(request: Request):
             repo = parse_generated_repo(full_text)
             if repo:
                 repo_id = str(uuid.uuid4())[:8]
-                state.repos.set(repo_id, {
+                                repo_entry = {
                     "status": "ready", "message": "Ready",
                     "data": repo["data"], "files": repo["files"], "text": repo["text"],
-                })
+                }
+                state.repos.set(repo_id, repo_entry)
+                state.cache_repo_to_db(repo_id, repo_entry)
                 yield sse_format(json.dumps({"repo_id": repo_id, "name": repo["name"], "file_count": len(repo["files"])}), "repo_ready")
             else:
                 yield sse_format("Failed to parse generated code. Try again.", "error")
