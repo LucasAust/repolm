@@ -150,18 +150,26 @@ def cache_repo_to_db(repo_id: str, repo_data: dict):
         conn.commit()
         conn.close()
 
-        # Also cache to Redis if available
+        # Also cache to Postgres + Redis if available
         try:
-            import redis_client
-            if redis_client.is_available():
-                import asyncio as _aio
+            import asyncio as _aio
+            loop = _aio.get_running_loop()
+            # Postgres (survives deploys)
+            if os.environ.get("DATABASE_URL"):
                 try:
-                    loop = _aio.get_running_loop()
+                    import db_postgres as _pg
+                    loop.create_task(_pg.cache_repo(repo_id, repo_data))
+                except ImportError:
+                    pass
+            # Redis (fast cache)
+            try:
+                import redis_client
+                if redis_client.is_available():
                     loop.create_task(redis_client.cache_repo(repo_id, repo_data))
-                except RuntimeError:
-                    pass  # no event loop, skip Redis
-        except ImportError:
-            pass
+            except ImportError:
+                pass
+        except RuntimeError:
+            pass  # no event loop (e.g. startup), skip async caches
     except Exception:
         logger.exception("Failed to cache repo %s to DB", repo_id)
 
