@@ -55,9 +55,11 @@ body::after{
 .nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:20px 0;transition:all 0.5s var(--ease)}
 .nav.scrolled{padding:14px 0;background:rgba(8,8,12,0.75);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border)}
 @media(max-width:640px){
-  .nav{top:6px;left:8px;right:8px;border-radius:16px;padding:14px 8px;background:rgba(8,8,12,0.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid var(--border)}
+  .nav{top:6px;left:8px;right:8px;border-radius:16px;padding:14px 8px;background:rgba(8,8,12,0.95);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid var(--border);overflow:hidden;transition:all 0.3s var(--ease)}
   .nav.scrolled{padding:10px 8px;border-radius:14px}
   .nav .wrap{padding:0 8px}
+  .nav.menu-open{border-radius:16px;padding-bottom:20px}
+  .nav-inner{flex-wrap:wrap}
 }
 .nav-inner{display:flex;align-items:center;justify-content:space-between}
 .logo{font-weight:700;font-size:1.15rem;letter-spacing:-0.03em}
@@ -69,8 +71,11 @@ body::after{
 .nav-btn:hover{border-color:var(--border-hover);background:rgba(255,255,255,0.05)}
 .mob-tog{display:none;color:var(--text);font-size:1.3rem;padding:6px}
 @media(max-width:640px){
-  .nav-r{position:fixed;inset:0;flex-direction:column;justify-content:center;gap:24px;background:#08080c;transform:translateX(100%);transition:transform 0.35s var(--ease);z-index:101}
-  .nav-r.open{transform:translateX(0)}
+  .nav-r{display:none;flex-direction:column;gap:12px;width:100%;padding-top:16px}
+  .nav-r.open{display:flex}
+  .nav-r a{font-size:1rem;padding:8px 12px;border-radius:10px}
+  .nav-r a:hover{background:rgba(255,255,255,0.05)}
+  .nav-r .nav-btn{text-align:center;width:100%}
   .mob-tog{display:block;z-index:102}
 }
 
@@ -766,7 +771,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 
   // Mobile menu
   const tog=document.getElementById('mobTog'),nr=document.getElementById('navR');
-  tog.addEventListener('click',()=>{const o=nr.classList.toggle('open');tog.setAttribute('aria-expanded',o);tog.textContent=o?'✕':'☰'});
+  tog.addEventListener('click',()=>{const o=nr.classList.toggle('open');tog.setAttribute('aria-expanded',o);tog.textContent=o?'✕':'☰';nav.classList.toggle('menu-open',o)});
 
   // GSAP
   const boot=()=>{
