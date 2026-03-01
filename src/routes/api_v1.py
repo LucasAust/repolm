@@ -34,7 +34,11 @@ pre{background:#111827;border:1px solid #374151;border-radius:8px;padding:1rem;o
 .post{background:#7c3aed;color:#fff}.get{background:#059669;color:#fff}
 .endpoint{font-family:monospace;color:#e5e7eb;font-size:.95rem}
 hr{border:none;border-top:1px solid #1f2937;margin:2rem 0}
+nav{display:flex;align-items:center;gap:1.5rem;margin-bottom:2rem;padding-bottom:1rem;border-bottom:1px solid #1f2937}
+nav a{color:#9ca3af;text-decoration:none;font-size:.875rem}nav a:hover{color:#fff}
+nav .logo{font-size:1.25rem;font-weight:700}nav .logo span{color:#c084fc}
 </style></head><body>
+<nav><a href="/app">← Back to App</a><a href="/" class="logo"><span>Repo</span>LM</a><a href="/pricing">Pricing</a><a href="/learn">Learn</a></nav>
 <h1>RepoLM API v1</h1>
 <p>Programmatic access to repo ingestion, generation, and analysis.</p>
 <p style="margin-top:.5rem">Base URL: <code>https://repolm.com/api/v1</code></p>
