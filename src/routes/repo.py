@@ -336,16 +336,27 @@ async def get_saved_repo(db_id: int, request: Request):
     saved = await db_async.get_repo(db_id, user["id"])
     if not saved:
         return JSONResponse({"error": "Not found"}, 404)
+    # Try to restore full files from cold cache (keyed by URL)
+    files = []
+    url = saved.get("url", "")
+    if url:
+        cached_id = await db_async.find_cached_repo_by_url(url)
+        if cached_id:
+            cached = await db_async.get_repo_with_fallback(cached_id)
+            if cached and cached.get("files"):
+                files = cached["files"]
+
     repo_id = str(uuid.uuid4())[:8]
-    state.repos.set(repo_id, {
+    repo_entry = {
         "status": "ready", "message": "Ready",
-        "data": {"name": saved["name"], "url": saved["url"], "tree": saved.get("tree", ""),
+        "data": {"name": saved["name"], "url": url, "tree": saved.get("tree", ""),
                  "total_chars": saved["total_chars"], "file_count": saved["file_count"],
                  "skipped": 0, "languages": saved["languages"]},
-        "files": [],
+        "files": files,
         "text": saved.get("repo_text", ""),
-    })
-    return {"repo_id": repo_id, "data": state.repos.get(repo_id)["data"], "file_index": saved["file_index"]}
+    }
+    state.repos.set(repo_id, repo_entry)
+    return {"repo_id": repo_id, "data": repo_entry["data"], "file_index": saved["file_index"], "has_files": len(files) > 0}
 
 
 @router.delete("/api/my/repos/{db_id}")
