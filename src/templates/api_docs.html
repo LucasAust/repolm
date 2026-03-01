@@ -64,7 +64,15 @@ details[open] summary{margin-bottom:.5rem}
 .tab-panel{display:none}.tab-panel.active{display:block}
 
 /* Responsive */
-@media(max-width:768px){.sidebar{display:none}.main{margin-left:0;padding:1.5rem}}
+@media(max-width:768px){
+  .sidebar{display:none}
+  .main{margin-left:0;padding:1rem;max-width:100%;overflow-x:hidden}
+  .code-block pre{font-size:.75rem;padding:.75rem;white-space:pre-wrap;word-break:break-all}
+  .endpoint-card{padding:1rem}
+  .error-table{display:block;overflow-x:auto}
+  .error-table th,.error-table td{font-size:.75rem;padding:.35rem .5rem;white-space:nowrap}
+  .tab-group{overflow-x:auto}
+}
 </style>
 </head>
 <body>
