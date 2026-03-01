@@ -573,7 +573,7 @@
 
 <!-- Landing (no repo loaded) -->
 <template x-if="!repoId && !exampleLoaded">
-    <div class="flex-1 flex items-start md:items-center justify-center overflow-y-auto p-4 pt-8 md:pt-4">
+    <div class="flex-1 flex items-center justify-center overflow-y-auto p-4">
         <div class="text-center max-w-lg w-full">
             <h1 class="text-3xl md:text-5xl font-bold mb-3"><span class="text-purple-400">Repo</span>LM</h1>
             <p class="text-gray-400 mb-8">Paste a GitHub repo or upload a folder. Learn anything.</p>
@@ -713,7 +713,7 @@
                         </div>
                     </template>
                 </div>
-                <div class="border-t border-gray-800 p-4">
+                <div class="border-t border-gray-800 p-4 pb-16 md:pb-4">
                     <div class="flex gap-2">
                         <input x-model="chatInput" type="text" placeholder="Ask about this codebase..."
                             @keydown.enter="sendChat()"
@@ -887,7 +887,7 @@
                             </div>
                         </template>
                     </div>
-                    <div class="border-t border-gray-800 p-2">
+                    <div class="border-t border-gray-800 p-2 pb-16 md:pb-2">
                         <div class="flex gap-1">
                             <input x-model="immersiveInput" type="text" :placeholder="selectedText ? 'Ask about selection...' : 'Ask about this file...'"
                                 @keydown.enter="sendImmersive()"
@@ -1005,7 +1005,7 @@
             <button @click="mobileDrawer=null;mode='chat'" :class="mode==='chat'&&!mobileDrawer?'active':''">
                 <span class="tab-icon">💬</span><span>Chat</span>
             </button>
-            <button x-show="currentFile" @click="mobileDrawer=null;mode='immersive'" :class="mode==='immersive'&&!mobileDrawer?'active':''">
+            <button @click="if(currentFile){mobileDrawer=null;mode='immersive'}" :class="mode==='immersive'&&!mobileDrawer?'active':''" :style="!currentFile && 'opacity:0.3'">
                 <span class="tab-icon">🔍</span><span>Deep Dive</span>
             </button>
             <button @click="mobileDrawer=null;mode='viewer'" :class="mode==='viewer'&&!mobileDrawer?'active':''">
