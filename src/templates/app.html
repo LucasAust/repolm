@@ -1366,7 +1366,15 @@ function repolm() {
             this.authLoading = true;
             const endpoint = this.authMode === 'login' ? '/auth/login' : '/auth/signup';
             const body = {email: this.authEmail, password: this.authPassword};
-            if (this.authMode === 'signup') body.username = this.authUsername;
+            if (this.authMode === 'signup') {
+                body.username = this.authUsername;
+                // Get reCAPTCHA token if available
+                if (window.grecaptcha && window._recaptchaSiteKey) {
+                    try {
+                        body.captcha_token = await grecaptcha.execute(window._recaptchaSiteKey, {action: 'signup'});
+                    } catch(e) { console.warn('reCAPTCHA failed', e); }
+                }
+            }
             try {
                 const res = await fetch(endpoint, {
                     method: 'POST', headers: {'Content-Type':'application/json'},
@@ -2514,6 +2522,17 @@ function repolm() {
         }
     }
 }
+</script>
+<script>
+// Load reCAPTCHA v3 if site key is configured
+fetch('/api/config/recaptcha').then(r=>r.json()).then(d=>{
+    if(d.site_key){
+        window._recaptchaSiteKey=d.site_key;
+        const s=document.createElement('script');
+        s.src='https://www.google.com/recaptcha/api.js?render='+d.site_key;
+        document.head.appendChild(s);
+    }
+}).catch(()=>{});
 </script>
 </body>
 </html>

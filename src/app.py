@@ -301,6 +301,13 @@ async def ready():
     return {"status": "ready"}
 
 
+@app.get("/api/config/recaptcha")
+async def recaptcha_config():
+    """Expose reCAPTCHA site key to frontend (not the secret)."""
+    site_key = os.environ.get("RECAPTCHA_SITE_KEY", "")
+    return {"site_key": site_key}
+
+
 @app.get("/api/status")
 async def api_status():
     """Pool utilization endpoint for monitoring."""
