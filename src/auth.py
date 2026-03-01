@@ -79,8 +79,9 @@ async def get_current_user(request: Request, require_verified: bool = True) -> O
     user = await db_async.get_user_by_session(token)
     if not user:
         return None
-    if require_verified and not user.get("email_verified", 0):
-        return None
+    # Email verification disabled — CAPTCHA + rate limiting handles spam
+    # if require_verified and not user.get("email_verified", 0):
+    #     return None
     return user
 
 
@@ -158,23 +159,12 @@ async def signup(request: Request):
         await db_async.set_referred_by(user_id, referrer["id"])
         await db_async.add_tokens(referrer["id"], 5, f"Referral reward: {username} signed up")
 
-    # Email verification token
-    verification_token = secrets.token_urlsafe(32)
-    await db_async.set_verification_token(user_id, verification_token)
-    logger.info("📧 Email verification URL: /auth/verify?token=%s (user: %s, email: %s)",
-                verification_token, username, email)
-
-    # Send verification + welcome emails (fire-and-forget in background thread)
+    # Send welcome email (fire-and-forget in background thread)
     if email:
         try:
             import threading
-            from email_service import send_verification, send_welcome
-
-            def _send_emails():
-                send_verification(email, username, verification_token)
-                send_welcome(email, username)
-
-            threading.Thread(target=_send_emails, daemon=True).start()
+            from email_service import send_welcome
+            threading.Thread(target=send_welcome, args=(email, username), daemon=True).start()
         except Exception:
             pass
 
@@ -182,8 +172,6 @@ async def signup(request: Request):
     response = JSONResponse({
         "ok": True,
         "username": username,
-        "email_verification_required": True,
-        "message": "Account created. Please verify your email to activate your account."
     })
     response.set_cookie(SESSION_COOKIE, session_token, **_cookie_kwargs(request))
     return response
