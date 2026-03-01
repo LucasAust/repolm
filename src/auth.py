@@ -41,10 +41,15 @@ def _get_client_ip(request: Request) -> str:
 
 
 async def _verify_captcha(token: str) -> bool:
-    """Verify reCAPTCHA v3 token. Returns True if valid (score >= 0.5)."""
+    """Verify reCAPTCHA v3 token. Returns True if valid (score >= 0.5).
+    Skips if secret key not set OR if site key not set (frontend can't generate tokens).
+    """
     secret = os.environ.get("RECAPTCHA_SECRET_KEY")
-    if not secret:
-        return True  # Skip in dev/local
+    site_key = os.environ.get("RECAPTCHA_SITE_KEY")
+    if not secret or not site_key:
+        return True  # Skip if not fully configured
+    if not token:
+        return True  # Frontend didn't load CAPTCHA script, don't block
     try:
         async with httpx.AsyncClient(timeout=5) as client:
             resp = await client.post("https://www.google.com/recaptcha/api/siteverify",
