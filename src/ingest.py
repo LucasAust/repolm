@@ -15,10 +15,11 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Tuple
 
 # Max file size to include (skip binaries / huge files)
-MAX_FILE_SIZE = 100_000  # 100KB
-MAX_TOTAL_CHARS = 500_000  # 500K chars total budget
-MAX_FILES_TO_WALK = 3000  # Stop walking after this many eligible files
+MAX_FILE_SIZE = 50_000  # 50KB per file (was 100KB — big files are rarely worth it)
+MAX_TOTAL_CHARS = 800_000  # 800K chars total budget (was 500K)
+MAX_FILES_TO_WALK = 5000  # Stop walking after this many eligible files
 MAX_FILES_FOR_IMPORT_GRAPH = 500  # Skip import graph for huge repos
+MAX_TEST_CHARS = 50_000  # Cap test files at 50K of the total budget
 
 # Files to always include if present (high signal)
 PRIORITY_FILES = [
@@ -52,6 +53,11 @@ SKIP_DIRS = {
     "dist", "build", ".next", ".nuxt", "target", "vendor",
     ".tox", ".mypy_cache", ".pytest_cache", "coverage",
     ".idea", ".vscode", ".DS_Store", "eggs", "*.egg-info",
+    "docs", "doc", "examples", "example", "samples", "sample",
+    "fixtures", "testdata", "test_data", "__fixtures__",
+    "migrations", "locale", "locales", "i18n", "l10n",
+    "static", "assets", "public", "media", "images", "img",
+    ".github", ".circleci", ".husky",
 }
 
 # Extensions to skip (binary / non-useful)
@@ -456,6 +462,7 @@ def ingest_repo(url: str, progress_callback=None) -> RepoData:
     skipped_summary = SkippedSummary()
 
     # Read files within budget
+    test_chars_used = 0
     for rel_path, fpath, size, is_priority, is_entry, is_test in all_files:
         if data.total_chars >= MAX_TOTAL_CHARS:
             skipped_summary.total += 1
@@ -468,6 +475,11 @@ def ingest_repo(url: str, progress_callback=None) -> RepoData:
                 skipped_summary.large_files += 1
             else:
                 skipped_summary.other += 1
+            data.skipped_count += 1
+            continue
+        # Cap test files so they don't eat the budget
+        if is_test and test_chars_used >= MAX_TEST_CHARS:
+            skipped_summary.tests += 1
             data.skipped_count += 1
             continue
         try:
@@ -490,6 +502,8 @@ def ingest_repo(url: str, progress_callback=None) -> RepoData:
             import_score=import_scores.get(rel_path, 0.0),
         ))
         data.total_chars += len(content)
+        if is_test:
+            test_chars_used += len(content)
 
     data.skipped_summary = skipped_summary
 
