@@ -64,8 +64,11 @@ def _hash_password(password: str, salt: str = None) -> tuple:
     return pw_hash, salt
 
 
-async def get_current_user(request: Request) -> Optional[dict]:
-    """Async version — runs DB lookup in executor."""
+async def get_current_user(request: Request, require_verified: bool = True) -> Optional[dict]:
+    """Async version — runs DB lookup in executor.
+    Sessions with expired expires_at are already filtered at the DB layer.
+    If require_verified=True, returns None for unverified accounts.
+    """
     auth_header = request.headers.get("authorization", "")
     if auth_header.startswith("Bearer "):
         token = auth_header[7:]
@@ -73,7 +76,12 @@ async def get_current_user(request: Request) -> Optional[dict]:
         token = request.cookies.get(SESSION_COOKIE)
     if not token:
         return None
-    return await db_async.get_user_by_session(token)
+    user = await db_async.get_user_by_session(token)
+    if not user:
+        return None
+    if require_verified and not user.get("email_verified", 0):
+        return None
+    return user
 
 
 def get_current_user_sync(request: Request) -> Optional[dict]:
@@ -113,6 +121,17 @@ async def signup(request: Request):
     if not username:
         username = email.split("@")[0]
 
+    # Rate limit: max 3 signups per IP per hour
+    client_ip = _get_client_ip(request)
+    allowed = await db_async.check_signup_rate_limit(client_ip, max_signups=3, window_seconds=3600)
+    if not allowed:
+        return JSONResponse({"error": "Too many signup attempts. Please try again later."}, 429)
+
+    # CAPTCHA verification (skipped if RECAPTCHA_SECRET_KEY not set)
+    captcha_token = body.get("captcha_token", "")
+    if not await _verify_captcha(captcha_token):
+        return JSONResponse({"error": "CAPTCHA verification failed. Please try again."}, 400)
+
     # Check if email exists
     existing = await db_async.check_email_exists(email)
     if existing:
@@ -131,10 +150,19 @@ async def signup(request: Request):
     referral_note = " (referral)" if referrer else ""
     user_id = await db_async.create_user_with_password(username, email, pw_hash, salt, signup_tokens, referral_note)
 
+    # Record signup attempt for rate limiting
+    await db_async.record_signup_attempt(client_ip)
+
     # Handle referral rewards
     if referrer:
         await db_async.set_referred_by(user_id, referrer["id"])
         await db_async.add_tokens(referrer["id"], 5, f"Referral reward: {username} signed up")
+
+    # Email verification token
+    verification_token = secrets.token_urlsafe(32)
+    await db_async.set_verification_token(user_id, verification_token)
+    logger.info("📧 Email verification URL: /auth/verify?token=%s (user: %s, email: %s)",
+                verification_token, username, email)
 
     # Send welcome email (async, fire-and-forget)
     try:
@@ -145,10 +173,28 @@ async def signup(request: Request):
     except Exception:
         pass
 
-    session_token = await db_async.create_session(user_id)
-    response = JSONResponse({"ok": True, "username": username})
+    session_token = await db_async.create_session(user_id, ttl_days=1)
+    response = JSONResponse({
+        "ok": True,
+        "username": username,
+        "email_verification_required": True,
+        "message": "Account created. Please verify your email to activate your account."
+    })
     response.set_cookie(SESSION_COOKIE, session_token, **_cookie_kwargs(request))
     return response
+
+
+@router.get("/auth/verify")
+async def verify_email(request: Request):
+    """Verify email address via token."""
+    token = request.query_params.get("token", "")
+    if not token:
+        return JSONResponse({"error": "Missing verification token"}, 400)
+    user = await db_async.verify_email_by_token(token)
+    if not user:
+        return JSONResponse({"error": "Invalid or expired verification token"}, 400)
+    logger.info("✅ Email verified for user %s (id=%s)", user.get("username"), user.get("id"))
+    return JSONResponse({"ok": True, "message": "Email verified successfully. You can now use your account."})
 
 
 @router.post("/auth/login")
@@ -169,7 +215,7 @@ async def login(request: Request):
     if not hmac.compare_digest(pw_hash, row["password_hash"]):
         return JSONResponse({"error": "Invalid email or password"}, 401)
 
-    session_token = await db_async.create_session(row["id"])
+    session_token = await db_async.create_session(row["id"], ttl_days=1)
     response = JSONResponse({"ok": True, "username": row["username"]})
     response.set_cookie(SESSION_COOKIE, session_token, **_cookie_kwargs(request))
     return response
@@ -187,7 +233,7 @@ async def logout(request: Request):
 
 @router.get("/auth/me")
 async def me(request: Request):
-    user = await get_current_user(request)
+    user = await get_current_user(request, require_verified=False)
     if not user:
         return {"user": None}
     sub = await db_async.get_subscription(user["id"])
@@ -198,7 +244,8 @@ async def me(request: Request):
     purchased = await db_async.has_ever_purchased(user["id"])
     return {"user": {"id": user["id"], "username": user["username"],
                      "email": user.get("email", ""), "plan": plan,
-                     "tokens": tokens, "has_purchased": purchased}}
+                     "tokens": tokens, "has_purchased": purchased,
+                     "email_verified": bool(user.get("email_verified", 0))}}
 
 
 @router.get("/auth/token")
