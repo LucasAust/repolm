@@ -300,6 +300,69 @@ async def upload_folder(request: Request):
     return result
 
 
+@router.post("/api/upload-zip")
+async def upload_zip(request: Request):
+    """Handle zip file upload — extracts and processes like folder upload."""
+    import zipfile
+    import io
+
+    if await check_rate_limit(request, "repo"):
+        return JSONResponse({"error": "Rate limit exceeded."}, 429)
+
+    form = await request.form()
+    upload = form.get("file")
+    if not upload or not hasattr(upload, "read"):
+        return JSONResponse({"error": "No file uploaded"}, 400)
+
+    raw = await upload.read()
+    if len(raw) > 50 * 1024 * 1024:
+        return JSONResponse({"error": "Zip file must be under 50 MB"}, 400)
+
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(raw))
+    except zipfile.BadZipFile:
+        return JSONResponse({"error": "Invalid zip file"}, 400)
+
+    files_data = []
+    for info in zf.infolist():
+        if info.is_dir():
+            continue
+        # Skip hidden/OS files
+        name = info.filename
+        if any(part.startswith(".") or part == "__MACOSX" for part in name.split("/")):
+            continue
+        try:
+            content = zf.read(name)
+            files_data.append({"path": name, "content": content})
+        except Exception:
+            continue
+
+    if not files_data:
+        return JSONResponse({"error": "Zip file is empty or contains no readable files"}, 400)
+
+    user = await get_current_user(request)
+    cost = TOKEN_COSTS["ingest"]
+    if user:
+        balance = await db_async.get_token_balance(user["id"])
+        if balance < cost:
+            return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
+        await db_async.spend_tokens(user["id"], cost, "Upload zip")
+
+    repo_id = str(uuid.uuid4())[:8]
+    await db_async.create_job(repo_id, kind="upload", repo_id=repo_id)
+    state.repos.set(repo_id, {"status": "queued", "message": "Processing upload...", "files": [], "text": "", "data": {}})
+
+    status, queue_pos = ingest_queue.submit(repo_id, run_upload_ingest, repo_id, files_data)
+    if status == "rejected":
+        return JSONResponse({"error": "Server busy, try again in a moment"}, 503)
+
+    result = {"repo_id": repo_id, "token_cost": cost}
+    if status == "queued":
+        result["queued"] = True
+        result["queue_position"] = queue_pos
+    return result
+
+
 @router.get("/api/repo/{repo_id}")
 async def get_repo(repo_id: str):
     # Try memory + DB fallback
