@@ -338,7 +338,42 @@
     <a href="/learn" class="text-xs text-gray-400 hover:text-purple-300 transition">📚 Learn</a>
     <a href="/pricing" class="text-xs text-gray-400 hover:text-purple-300 transition">💎 Pricing</a>
     <button @click="showConceptLab=true" class="text-xs text-gray-400 hover:text-purple-300 transition">🧪 Lab</button>
-    
+
+    <!-- My Repos dropdown -->
+    <template x-if="user">
+        <div class="relative" x-data="{showRepoMenu: false}" @click.away="showRepoMenu=false">
+            <button @click="showRepoMenu=!showRepoMenu" class="text-xs text-gray-400 hover:text-purple-300 transition flex items-center gap-1">
+                📂 My Repos
+                <span x-show="savedRepos.length" class="bg-purple-600 text-white text-[10px] px-1.5 py-0.5 rounded-full" x-text="savedRepos.length"></span>
+            </button>
+            <div x-show="showRepoMenu" x-transition class="absolute top-full left-0 mt-2 w-72 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl z-50 overflow-hidden">
+                <div class="px-3 py-2 border-b border-gray-800 flex items-center justify-between">
+                    <span class="text-xs text-gray-400 font-medium">Saved Repositories</span>
+                    <button @click="resetToHome(); showRepoMenu=false" class="text-[10px] text-purple-400 hover:text-purple-300">+ New Repo</button>
+                </div>
+                <div class="max-h-64 overflow-y-auto">
+                    <template x-if="savedRepos.length === 0">
+                        <p class="px-3 py-4 text-xs text-gray-500 text-center">No saved repos yet</p>
+                    </template>
+                    <template x-for="r in savedRepos" :key="r.id">
+                        <button @click="loadSavedRepo(r.id); showRepoMenu=false" class="w-full flex items-center gap-3 hover:bg-gray-800 px-3 py-2.5 transition text-left border-b border-gray-800/50 last:border-0">
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm text-white truncate" x-text="r.name"></p>
+                                <p class="text-[10px] text-gray-500" x-text="r.file_count + ' files · ' + Object.keys(r.languages||{}).slice(0,3).join(', ')"></p>
+                            </div>
+                            <button @click.stop="deleteSavedRepo(r.id)" class="text-gray-600 hover:text-red-400 text-xs shrink-0">✕</button>
+                        </button>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- New repo button (when viewing a repo) -->
+    <template x-if="repoReady">
+        <button @click="resetToHome()" class="text-xs text-gray-400 hover:text-purple-300 transition">+ New Repo</button>
+    </template>
+
     <template x-if="repoData.name">
         <div class="flex items-center gap-3 text-sm text-gray-400">
             <span class="text-white font-medium" x-text="repoData.name"></span>
@@ -1379,6 +1414,35 @@ function repolm() {
                     this.loadingRepo = false;
                 }
             }, 1500);
+        },
+
+        resetToHome() {
+            this.repoId = null;
+            this.repoReady = false;
+            this.repoData = {};
+            this.repoError = null;
+            this.repoMessage = '';
+            this.loadingRepo = false;
+            this.files = [];
+            this.currentFile = null;
+            this.fileContent = null;
+            this.viewingGenerated = null;
+            this.viewingContent = '';
+            this.renderedContent = '';
+            this.generated = [];
+            this.messages = [];
+            this.immersiveMessages = [];
+            this.savedDbId = null;
+            this.urlInput = '';
+            this.mode = 'viewer';
+            this.audioUrl = null;
+            this.parsedSlides = [];
+            this.pptxUrl = null;
+            this.generating = false;
+            // Reload saved repos list
+            this.loadSavedRepos();
+            // Update URL
+            window.history.replaceState({}, '', '/app');
         },
 
         async loadFiles() {
