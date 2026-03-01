@@ -4,7 +4,10 @@ RepoLM — Stripe payment integration (token packs)
 from __future__ import annotations
 
 import os
+import logging
 import stripe
+
+logger = logging.getLogger("repolm")
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
@@ -144,7 +147,8 @@ async def cancel_subscription(request: Request):
         stripe.Subscription.modify(sub["subscription_id"], cancel_at_period_end=True)
         return {"ok": True, "message": "Subscription will cancel at end of billing period"}
     except Exception as e:
-        return JSONResponse({"error": str(e)}, 500)
+        logger.exception("Subscription cancellation failed")
+        return JSONResponse({"error": "Failed to cancel subscription. Please try again."}, 500)
 
 
 @router.get("/api/my/subscription")

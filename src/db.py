@@ -318,8 +318,9 @@ def create_or_update_user(github_id: int, username: str, email: str = None, avat
                          (username, email, avatar_url, row["id"]))
             return row["id"]
         else:
-            cur = conn.execute("INSERT INTO users (github_id, username, email, avatar_url, tokens) VALUES (?,?,?,?,10)",
-                               (github_id, username, email, avatar_url))
+            from config import DEFAULT_SIGNUP_TOKENS
+            cur = conn.execute("INSERT INTO users (github_id, username, email, avatar_url, tokens) VALUES (?,?,?,?,?)",
+                               (github_id, username, email, avatar_url, DEFAULT_SIGNUP_TOKENS))
             user_id = cur.lastrowid
             conn.execute("INSERT INTO token_transactions (user_id, amount, action, description) VALUES (?,?,?,?)",
                          (user_id, 10, "signup", "Free signup tokens"))

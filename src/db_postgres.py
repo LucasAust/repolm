@@ -367,8 +367,8 @@ async def create_or_update_user(github_id: int, username: str, email: str = None
             return row["id"]
         else:
             new_id = await conn.fetchval(
-                "INSERT INTO users (github_id, username, email, avatar_url, tokens) VALUES ($1,$2,$3,$4,10) RETURNING id",
-                github_id, username, email, avatar_url)
+                "INSERT INTO users (github_id, username, email, avatar_url, tokens) VALUES ($1,$2,$3,$4,$5) RETURNING id",
+                github_id, username, email, avatar_url, 50)
             await conn.execute(
                 "INSERT INTO token_transactions (user_id, amount, action, description) VALUES ($1,$2,$3,$4)",
                 new_id, 10, "signup", "Free signup tokens")

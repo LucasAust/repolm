@@ -263,15 +263,18 @@ async def chat_stream(repo_id: str, request: Request):
         return JSONResponse({"error": "Too many concurrent streams. Please close other tabs."}, 429)
 
     user = await get_current_user(request)
+    if not user:
+        sse_ctx.release()
+        return JSONResponse({"error": "Authentication required"}, 401)
     is_immersive = bool(selection and file_context)
     cost = TOKEN_COSTS["immersive"] if is_immersive else TOKEN_COSTS["chat"]
-    if user:
-        balance = await db_async.get_token_balance(user["id"])
-        if balance < cost:
-            sse_ctx.release()
-            return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
-        if not await db_async.spend_tokens(user["id"], cost, "Immersive question" if is_immersive else "Chat message"):
-            return JSONResponse({"error": "insufficient_tokens"}, 402)
+    balance = await db_async.get_token_balance(user["id"])
+    if balance < cost:
+        sse_ctx.release()
+        return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
+    if not await db_async.spend_tokens(user["id"], cost, "Immersive question" if is_immersive else "Chat message"):
+        sse_ctx.release()
+        return JSONResponse({"error": "insufficient_tokens"}, 402)
 
     history = body.get("history", [])
 

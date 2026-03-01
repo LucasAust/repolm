@@ -3,7 +3,10 @@ RepoLM — Concept Lab endpoints.
 """
 
 import json
+import logging
 import uuid
+
+logger = logging.getLogger("repolm")
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -39,7 +42,8 @@ async def concept_lab(request: Request):
     if not concept:
         return JSONResponse({"error": "Concept description required"}, 400)
 
-    await db_async.spend_tokens(user["id"], cost, f"Concept Lab: {concept[:50]}")
+    if not await db_async.spend_tokens(user["id"], cost, f"Concept Lab: {concept[:50]}"):
+        return JSONResponse({"error": "insufficient_tokens"}, 402)
 
     async def event_stream():
         full_text = ""
@@ -86,7 +90,8 @@ async def concept_lab(request: Request):
                 yield sse_format("Failed to parse generated code. Try again.", "error")
             yield sse_format("", "done")
         except Exception as e:
-            yield sse_format(str(e), "error")
+            logger.exception("Concept Lab generation failed")
+            yield sse_format("Generation failed. Please try again.", "error")
 
     return StreamingResponse(event_stream(), media_type="text/event-stream",
                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

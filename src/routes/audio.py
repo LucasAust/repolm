@@ -31,18 +31,20 @@ def run_audio_gen(audio_id, script_text):
         state.audio_jobs.set(audio_id, {"status": "done", "path": path})
     except Exception as e:
         logger.exception("Audio gen failed for %s", audio_id)
-        db_async.sync_update_job(audio_id, status="error", message=str(e))
+        db_async.sync_update_job(audio_id, status="error", message="Audio generation failed. Please try again.")
 
 
 @router.post("/api/podcast-audio")
 async def podcast_audio(request: Request):
     user = await get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Authentication required"}, 401)
     cost = TOKEN_COSTS["audio"]
-    if user:
-        balance = await db_async.get_token_balance(user["id"])
-        if balance < cost:
-            return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
-        await db_async.spend_tokens(user["id"], cost, "Podcast audio generation")
+    balance = await db_async.get_token_balance(user["id"])
+    if balance < cost:
+        return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
+    if not await db_async.spend_tokens(user["id"], cost, "Podcast audio generation"):
+        return JSONResponse({"error": "insufficient_tokens"}, 402)
     body = await request.json()
     script = body.get("script", "")
     if not script:

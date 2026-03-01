@@ -10,6 +10,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, FileResponse
 
 from config import OUTPUT_DIR
+from auth import get_current_user
 
 router = APIRouter()
 
@@ -17,6 +18,9 @@ router = APIRouter()
 @router.post("/api/slides-pptx")
 async def slides_pptx(request: Request):
     """Generate a .pptx file from slide markdown."""
+    user = await get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Authentication required"}, 401)
     try:
         from pptx import Presentation
         from pptx.util import Inches, Pt, Emu
