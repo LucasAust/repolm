@@ -9,6 +9,7 @@
 <link rel="apple-touch-icon" href="/static/favicon.svg">
 <meta name="description" content="RepoLM API — programmatically ingest repos, generate overviews, podcasts, and slides.">
 <script src="https://cdn.tailwindcss.com"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 <style>
 body{background:#09090b;color:#e5e7eb;font-family:system-ui,-apple-system,sans-serif}
 .code-block{background:#0d1117;border:1px solid #1f2937;border-radius:8px;padding:16px;font-size:13px;overflow-x:auto;font-family:'SF Mono',Consolas,monospace}
@@ -20,10 +21,13 @@ body{background:#09090b;color:#e5e7eb;font-family:system-ui,-apple-system,sans-s
 </head>
 <body>
 <div class="max-w-4xl mx-auto px-6 py-12">
-    <nav class="flex items-center justify-between mb-12">
-        <a href="/" class="text-xl font-bold"><span class="text-purple-400">Repo</span>LM</a>
+    <nav class="flex items-center justify-between mb-12" x-data="{fromApp: document.referrer.includes('/app')}">
         <div class="flex items-center gap-4">
-            <a href="/app" class="text-sm text-gray-400 hover:text-purple-300">App</a>
+            <a :href="fromApp ? '/app' : '/'" class="text-sm text-gray-400 hover:text-white transition bg-gray-800 px-3 py-1.5 rounded-lg" x-text="fromApp ? '← Back to App' : '← Home'"></a>
+            <a href="/" class="text-xl font-bold"><span class="text-purple-400">Repo</span>LM</a>
+        </div>
+        <div class="flex items-center gap-4">
+            <a href="/pricing" class="text-sm text-gray-400 hover:text-purple-300">Pricing</a>
             <a href="/learn" class="text-sm text-gray-400 hover:text-purple-300">Learn</a>
         </div>
     </nav>
