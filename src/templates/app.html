@@ -389,7 +389,7 @@
                 <button @click="showSettings=!showSettings" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition">
                     ⚙️ <span x-text="depth==='high-level'?'High':'Low'"></span> · <span x-text="expertise.charAt(0).toUpperCase()+expertise.slice(1)"></span>
                 </button>
-                <div x-show="showSettings" x-transition class="absolute right-0 top-full mt-2 w-48 bg-gray-950 border border-gray-700 rounded-xl shadow-2xl z-50 p-3 space-y-3" style="opacity:1;backdrop-filter:none">
+                <div x-show="showSettings" x-transition class="absolute right-0 top-full mt-2 rounded-xl shadow-2xl p-3 space-y-3" style="z-index:9999;background:#030712;border:1px solid #374151;width:220px">
                     <div>
                         <p class="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">Depth</p>
                         <div class="flex gap-1">
@@ -399,14 +399,21 @@
                     </div>
                     <div>
                         <p class="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">Expertise</p>
-                        <div class="flex gap-1">
-                            <button @click="expertise='beginner'" :class="expertise==='beginner'?'bg-purple-600 text-white':'bg-gray-800 text-gray-400 hover:bg-gray-700'" class="flex-1 px-2 py-1.5 rounded-lg text-xs transition">Beginner</button>
-                            <button @click="expertise='amateur'" :class="expertise==='amateur'?'bg-purple-600 text-white':'bg-gray-800 text-gray-400 hover:bg-gray-700'" class="flex-1 px-2 py-1.5 rounded-lg text-xs transition">Amateur</button>
-                            <button @click="expertise='expert'" :class="expertise==='expert'?'bg-purple-600 text-white':'bg-gray-800 text-gray-400 hover:bg-gray-700'" class="flex-1 px-2 py-1.5 rounded-lg text-xs transition">Expert</button>
+                        <div class="grid grid-cols-3 gap-1">
+                            <button @click="expertise='beginner'" :class="expertise==='beginner'?'bg-purple-600 text-white':'bg-gray-800 text-gray-400 hover:bg-gray-700'" class="px-1 py-1.5 rounded-lg text-[11px] transition text-center">Beginner</button>
+                            <button @click="expertise='amateur'" :class="expertise==='amateur'?'bg-purple-600 text-white':'bg-gray-800 text-gray-400 hover:bg-gray-700'" class="px-1 py-1.5 rounded-lg text-[11px] transition text-center">Amateur</button>
+                            <button @click="expertise='expert'" :class="expertise==='expert'?'bg-purple-600 text-white':'bg-gray-800 text-gray-400 hover:bg-gray-700'" class="px-1 py-1.5 rounded-lg text-[11px] transition text-center">Expert</button>
                         </div>
                     </div>
                 </div>
             </div>
+        </template>
+        <!-- Save repo button -->
+        <template x-if="repoReady && user && !savedDbId">
+            <button @click="saveRepo()" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2.5 py-1.5 rounded-lg transition">💾 Save</button>
+        </template>
+        <template x-if="repoReady && savedDbId">
+            <span class="text-xs text-green-400">✓ Saved</span>
         </template>
         <!-- Token balance -->
         <template x-if="user">
