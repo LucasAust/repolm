@@ -292,6 +292,16 @@ async def generate_api_key(user_id: int) -> str:
     return await _run(_sync.generate_api_key, user_id)
 
 
+async def get_user_api_key(user_id: int) -> Optional[str]:
+    if _USE_POSTGRES:
+        return await _pg.get_user_api_key(user_id)
+    def _get():
+        with _sync.db() as conn:
+            row = conn.execute("SELECT api_key FROM users WHERE id=?", (user_id,)).fetchone()
+            return row["api_key"] if row else None
+    return await _run(_get)
+
+
 async def get_user_by_api_key(api_key: str) -> Optional[dict]:
     if _USE_POSTGRES:
         return await _pg.get_user_by_api_key(api_key)

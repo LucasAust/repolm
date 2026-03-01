@@ -332,6 +332,30 @@
     </div>
 </div>
 
+<!-- API Key Modal -->
+<div x-show="showApiKeyModal" x-transition class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" @click.self="showApiKeyModal=false">
+    <div class="bg-gray-950 border border-gray-700 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-bold">🔑 API Key</h2>
+            <button @click="showApiKeyModal=false" class="text-gray-500 hover:text-white">✕</button>
+        </div>
+        <p class="text-xs text-gray-400 mb-4">Use your API key to access RepoLM programmatically. See <a href="/api/v1/docs" class="text-purple-400 hover:underline">API docs</a> for usage.</p>
+        <div x-show="apiKey" class="mb-4">
+            <div class="flex items-center gap-2 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2">
+                <code class="text-sm text-green-400 flex-1 truncate" x-text="apiKeyVisible ? apiKey : '••••••••••••••••••••••••'"></code>
+                <button @click="apiKeyVisible=!apiKeyVisible" class="text-xs text-gray-400 hover:text-white" x-text="apiKeyVisible ? '🙈' : '👁'"></button>
+                <button @click="navigator.clipboard.writeText(apiKey)" class="text-xs text-gray-400 hover:text-white">📋</button>
+            </div>
+        </div>
+        <div x-show="!apiKey" class="mb-4 text-sm text-gray-500">No API key yet.</div>
+        <div class="flex gap-2">
+            <button @click="generateApiKey()" class="flex-1 bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold py-2 rounded-lg transition" x-text="apiKey ? 'Regenerate Key' : 'Generate Key'"></button>
+            <button @click="showApiKeyModal=false" class="px-4 py-2 text-sm text-gray-500 hover:text-gray-300">Close</button>
+        </div>
+        <p x-show="apiKey" class="text-xs text-yellow-500/70 mt-3">⚠️ Regenerating will invalidate your current key.</p>
+    </div>
+</div>
+
 <!-- Top bar -->
 <div class="h-12 border-b border-gray-800 flex items-center px-4 gap-4 shrink-0 bg-gray-950">
     <a href="/" class="text-lg font-bold hover:opacity-80"><span class="text-purple-400">Repo</span>LM</a>
@@ -431,6 +455,7 @@
                     <div class="px-3 py-2 border-b border-gray-800">
                         <p class="text-xs text-white font-medium" x-text="user.username"></p>
                     </div>
+                    <button @click="showApiKeyModal=true; showUserMenu=false" class="w-full text-left px-3 py-2 text-xs text-gray-400 hover:bg-gray-800 hover:text-white transition">API Key</button>
                     <a href="/auth/logout" class="block px-3 py-2 text-xs text-gray-400 hover:bg-gray-800 hover:text-white transition">Logout</a>
                 </div>
             </div>
@@ -998,6 +1023,9 @@ function repolm() {
         ],
         // Concept Lab state
         showConceptLab: false,
+        showApiKeyModal: false,
+        apiKey: null,
+        apiKeyVisible: false,
         conceptInput: '',
         conceptLanguage: 'Python',
         conceptDifficulty: 'intermediate',
@@ -1149,9 +1177,28 @@ function repolm() {
                     this.userTokens = data.user.tokens || 0;
                     this.userHasPurchased = data.user.has_purchased || false;
                     this.loadSavedRepos();
+                    this.loadApiKey();
                 }
             } catch(e) {}
             this.authChecked = true;
+        },
+
+        async loadApiKey() {
+            try {
+                const res = await fetch('/auth/api-key');
+                if (res.ok) { const data = await res.json(); this.apiKey = data.api_key; }
+            } catch(e) {}
+        },
+        async generateApiKey() {
+            if (this.apiKey && !confirm('This will invalidate your current key. Continue?')) return;
+            try {
+                const res = await fetch('/auth/api-key', {method:'POST'});
+                if (res.ok) {
+                    const data = await res.json();
+                    this.apiKey = data.api_key;
+                    this.apiKeyVisible = true;
+                }
+            } catch(e) {}
         },
 
         async refreshTokens() {

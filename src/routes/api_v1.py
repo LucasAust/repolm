@@ -22,6 +22,70 @@ router = APIRouter(prefix="/api/v1")
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 
 
+@router.get("/docs", response_class=HTMLResponse)
+async def api_docs():
+    return """<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RepoLM API Docs</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0a0a0a;color:#e5e7eb;font-family:system-ui,-apple-system,sans-serif;padding:2rem;max-width:800px;margin:0 auto;line-height:1.6}
+h1{color:#c084fc;margin-bottom:.5rem}h2{color:#a78bfa;margin:2rem 0 .5rem;font-size:1.2rem}h3{color:#e5e7eb;margin:1.5rem 0 .25rem;font-size:1rem}
+p,li{color:#9ca3af;font-size:.9rem}a{color:#c084fc}code{background:#1f2937;padding:.15rem .4rem;border-radius:4px;font-size:.85rem;color:#34d399}
+pre{background:#111827;border:1px solid #374151;border-radius:8px;padding:1rem;overflow-x:auto;margin:.5rem 0 1rem;font-size:.85rem;color:#d1d5db}
+.method{display:inline-block;font-weight:700;font-size:.75rem;padding:.15rem .5rem;border-radius:4px;margin-right:.5rem}
+.post{background:#7c3aed;color:#fff}.get{background:#059669;color:#fff}
+.endpoint{font-family:monospace;color:#e5e7eb;font-size:.95rem}
+hr{border:none;border-top:1px solid #1f2937;margin:2rem 0}
+</style></head><body>
+<h1>RepoLM API v1</h1>
+<p>Programmatic access to repo ingestion, generation, and analysis.</p>
+<p style="margin-top:.5rem">Base URL: <code>https://repolm.com/api/v1</code></p>
+
+<h2>Authentication</h2>
+<p>All endpoints require an <code>X-API-Key</code> header. Generate a key from your account settings (avatar menu → API Key).</p>
+<pre>curl -H "X-API-Key: your_key_here" https://repolm.com/api/v1/usage</pre>
+
+<hr>
+<h2>Endpoints</h2>
+
+<h3><span class="method post">POST</span><span class="endpoint">/repos</span></h3>
+<p>Ingest a GitHub repository.</p>
+<pre>{
+  "url": "https://github.com/owner/repo"
+}</pre>
+<p>Returns: <code>{"repo_id": "abc123", "token_cost": 10}</code>. If queued: includes <code>"queued": true, "queue_position": N</code>.</p>
+
+<h3><span class="method get">GET</span><span class="endpoint">/repos/{repo_id}</span></h3>
+<p>Check repo ingestion status.</p>
+<p>Returns: <code>{"status": "ready|queued|processing|error", "data": {...}, "file_count": N}</code></p>
+
+<h3><span class="method post">POST</span><span class="endpoint">/repos/{repo_id}/generate</span></h3>
+<p>Generate content from an ingested repo.</p>
+<pre>{
+  "kind": "overview",
+  "depth": "high-level",
+  "expertise": "amateur"
+}</pre>
+<p><code>kind</code>: <code>overview</code>, <code>podcast</code>, or <code>slides</code>.<br>
+<code>depth</code>: <code>high-level</code> or <code>in-depth</code>.<br>
+<code>expertise</code>: <code>amateur</code>, <code>intermediate</code>, or <code>expert</code>.</p>
+<p>Returns: <code>{"job_id": "xyz789", "token_cost": 25}</code></p>
+
+<h3><span class="method get">GET</span><span class="endpoint">/jobs/{job_id}</span></h3>
+<p>Poll job status. Returns the job object with <code>status</code>, <code>message</code>, and <code>result</code> when complete.</p>
+
+<h3><span class="method get">GET</span><span class="endpoint">/usage</span></h3>
+<p>Get your API usage stats.</p>
+
+<hr>
+<h2>Rate Limits</h2>
+<ul><li>Free: 10 API calls/day</li><li>Pro: 100 API calls/day</li><li>Enterprise: 1,000 API calls/day</li></ul>
+
+<h2>Token Costs</h2>
+<ul><li>Ingest: 10 tokens</li><li>Overview: 25 tokens</li><li>Podcast: 50 tokens</li><li>Slides: 25 tokens</li></ul>
+
+<p style="margin-top:2rem;color:#6b7280;font-size:.8rem">Questions? <a href="mailto:support@repolm.com">support@repolm.com</a></p>
+</body></html>"""
+
+
 async def _get_api_user(request: Request):
     """Extract and validate API key from request. Returns (user, error_response)."""
     api_key = request.headers.get("x-api-key", "")

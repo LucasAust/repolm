@@ -798,6 +798,13 @@ async def generate_api_key(user_id: int) -> str:
     return key
 
 
+async def get_user_api_key(user_id: int) -> Optional[str]:
+    pool = _get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT api_key FROM users WHERE id=$1", user_id)
+        return row["api_key"] if row else None
+
+
 async def get_user_by_api_key(api_key: str) -> Optional[dict]:
     pool = _get_pool()
     async with pool.acquire() as conn:
