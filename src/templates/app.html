@@ -651,7 +651,7 @@
 
 <!-- Main 3-panel layout -->
 <template x-if="repoReady ">
-    <div class="flex-1 flex overflow-hidden main-layout relative">
+    <div class="flex-1 flex overflow-hidden main-layout relative min-h-0">
 
         <!-- Mobile overlay -->
         <div class="mobile-overlay" :class="mobileDrawer ? 'open' : ''" @click="mobileDrawer=null"></div>
@@ -681,7 +681,7 @@
         </div>
 
         <!-- CENTER: Chat or File viewer -->
-        <div class="flex-1 flex flex-col min-w-0">
+        <div class="flex-1 flex flex-col min-w-0 min-h-0">
             <div class="flex h-[41px] border-b border-gray-800 px-4 shrink-0 desktop-tabs">
                 <button @click="mode='chat'" :class="mode==='chat'?'border-purple-500 text-purple-400':'border-transparent text-gray-500 hover:text-gray-300'" class="px-4 py-2 text-sm font-medium border-b-2 transition">💬 Chat</button>
                 <button @click="mode='viewer'" :class="mode==='viewer'?'border-purple-500 text-purple-400':'border-transparent text-gray-500 hover:text-gray-300'" class="px-4 py-2 text-sm font-medium border-b-2 transition">📄 Viewer</button>
@@ -689,7 +689,7 @@
             </div>
 
             <!-- Chat mode -->
-            <div x-show="mode==='chat'" class="flex-1 flex flex-col">
+            <div x-show="mode==='chat'" class="flex-1 flex flex-col min-h-0">
                 <div class="flex-1 overflow-y-auto chat-area p-4 space-y-4" x-ref="chatScroll">
                     <template x-if="messages.length===0">
                         <div class="text-center text-gray-500 mt-20">
