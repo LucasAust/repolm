@@ -344,7 +344,7 @@
             <div class="flex items-center gap-2 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2">
                 <code class="text-sm text-green-400 flex-1 truncate" x-text="apiKeyVisible ? apiKey : '••••••••••••••••••••••••'"></code>
                 <button @click="apiKeyVisible=!apiKeyVisible" class="text-xs text-gray-400 hover:text-white" x-text="apiKeyVisible ? '🙈' : '👁'"></button>
-                <button @click="navigator.clipboard.writeText(apiKey)" class="text-xs text-gray-400 hover:text-white">📋</button>
+                <button @click="navigator.clipboard.writeText(apiKey); apiKeyCopied=true; setTimeout(()=>apiKeyCopied=false, 1500)" class="text-xs text-gray-400 hover:text-white" x-text="apiKeyCopied ? '✅' : '📋'"></button>
             </div>
         </div>
         <div x-show="!apiKey" class="mb-4 text-sm text-gray-500">No API key yet.</div>
@@ -1026,6 +1026,7 @@ function repolm() {
         showApiKeyModal: false,
         apiKey: null,
         apiKeyVisible: false,
+        apiKeyCopied: false,
         conceptInput: '',
         conceptLanguage: 'Python',
         conceptDifficulty: 'intermediate',
