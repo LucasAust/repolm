@@ -164,14 +164,19 @@ async def signup(request: Request):
     logger.info("📧 Email verification URL: /auth/verify?token=%s (user: %s, email: %s)",
                 verification_token, username, email)
 
-    # Send welcome email (async, fire-and-forget)
-    try:
-        from email_service import send_welcome
-        if email:
+    # Send verification + welcome emails (fire-and-forget in background thread)
+    if email:
+        try:
             import threading
-            threading.Thread(target=send_welcome, args=(email, username), daemon=True).start()
-    except Exception:
-        pass
+            from email_service import send_verification, send_welcome
+
+            def _send_emails():
+                send_verification(email, username, verification_token)
+                send_welcome(email, username)
+
+            threading.Thread(target=_send_emails, daemon=True).start()
+        except Exception:
+            pass
 
     session_token = await db_async.create_session(user_id, ttl_days=1)
     response = JSONResponse({
