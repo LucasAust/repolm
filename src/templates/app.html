@@ -1382,9 +1382,13 @@ function repolm() {
                 });
                 const data = await res.json();
                 if (!res.ok) { this.authError = data.error || 'Something went wrong'; this.authLoading = false; return; }
-                this.showAuthModal = false;
+                // Keep modal open with loading state until account is fully loaded
+                this.authError = '';
                 this.authEmail = ''; this.authPassword = ''; this.authUsername = '';
                 await this.checkAuth();
+                this.showAuthModal = false;
+                this.authLoading = false;
+                return;
             } catch(e) { this.authError = 'Connection failed'; }
             this.authLoading = false;
         },
