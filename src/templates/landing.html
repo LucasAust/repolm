@@ -11,6 +11,8 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="RepoLM — Learn Any Codebase">
 <meta name="twitter:description" content="Paste a GitHub repo. Get overviews, podcasts, and slides. From beginner to expert.">
+<meta property="og:image" content="https://repolm.com/static/og-image.png">
+<meta name="twitter:image" content="https://repolm.com/static/og-image.png">
 <meta name="theme-color" content="#08080c">
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -856,6 +858,9 @@ document.addEventListener('DOMContentLoaded',()=>{
     );
   };
   boot();
+
+  // GSAP fallback: if GSAP fails to load, make content visible after 3s
+  setTimeout(function(){document.querySelectorAll('.gs').forEach(function(el){el.style.opacity='1';el.style.transform='none'})},3000);
 
   // === WIREFRAME GRID PLANE (Canvas 2D) ===
   const canvas=document.getElementById('oceanCanvas');

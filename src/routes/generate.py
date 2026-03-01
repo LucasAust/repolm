@@ -246,6 +246,7 @@ async def chat_stream(repo_id: str, request: Request):
         if balance < cost:
             sse_ctx.release()
             return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
+        await db_async.spend_tokens(user["id"], cost, "Immersive question" if is_immersive else "Chat message")
 
     history = body.get("history", [])
 

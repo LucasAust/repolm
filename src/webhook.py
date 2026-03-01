@@ -10,9 +10,32 @@ import logging
 import asyncio
 from typing import Optional
 
+import ipaddress
+import socket
+
 import httpx
 
 logger = logging.getLogger("repolm")
+
+
+def _validate_webhook_url(url: str):
+    """Validate webhook URL: must be https and resolve to a public IP."""
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    if parsed.scheme != "https":
+        raise ValueError("Webhook URL must use https:// scheme")
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError("Webhook URL has no hostname")
+    # Resolve hostname and check all addresses
+    try:
+        addrinfos = socket.getaddrinfo(hostname, parsed.port or 443, proto=socket.IPPROTO_TCP)
+    except socket.gaierror:
+        raise ValueError("Cannot resolve webhook hostname: %s" % hostname)
+    for family, _type, _proto, _canonname, sockaddr in addrinfos:
+        ip = ipaddress.ip_address(sockaddr[0])
+        if ip.is_private or ip.is_reserved or ip.is_loopback or ip.is_link_local or ip.is_multicast:
+            raise ValueError("Webhook URL resolves to a private/reserved IP: %s" % ip)
 
 # Reference to main event loop, set at startup (same pattern as db_async)
 _main_loop = None  # type: Optional[asyncio.AbstractEventLoop]
@@ -30,6 +53,11 @@ def _sign_payload(payload_bytes: bytes, secret: str) -> str:
 
 async def _deliver_webhook(webhook_url: str, payload: dict, api_key: str):
     """POST webhook payload to the registered URL. 10s timeout, log failures."""
+    try:
+        _validate_webhook_url(webhook_url)
+    except ValueError as e:
+        logger.warning("Webhook URL rejected: %s — %s", webhook_url, e)
+        return
     body = json.dumps(payload, separators=(",", ":"))
     signature = _sign_payload(body.encode("utf-8"), api_key)
     headers = {

@@ -2,11 +2,13 @@
 RepoLM — Share & export endpoints.
 """
 
+import html as html_mod
 import io
 import re
 import json
 import time
 import zipfile
+from collections import defaultdict
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -15,6 +17,18 @@ from starlette.responses import Response
 import state
 
 router = APIRouter()
+
+# Rate limiting for share creation: {ip: [timestamps]}
+_share_rate: dict = defaultdict(list)
+_SHARE_MAX_PER_HOUR = 10
+_SHARE_MAX_CONTENT_BYTES = 500 * 1024  # 500 KB
+
+
+def _get_client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",")[-1].strip()
+    return request.client.host if request.client else "unknown"
 
 
 @router.post("/api/share")
@@ -27,6 +41,19 @@ async def create_share(request: Request):
     repo_name = body.get("repo_name", "repo")
     if not content:
         return JSONResponse({"error": "No content to share"}, 400)
+
+    # Content size limit
+    if len(content.encode("utf-8")) > _SHARE_MAX_CONTENT_BYTES:
+        return JSONResponse({"error": "Content too large (max 500KB)"}, 400)
+
+    # Rate limit: max 10 shares per IP per hour
+    client_ip = _get_client_ip(request)
+    now = time.time()
+    _share_rate[client_ip] = [t for t in _share_rate[client_ip] if now - t < 3600]
+    if len(_share_rate[client_ip]) >= _SHARE_MAX_PER_HOUR:
+        return JSONResponse({"error": "Too many shares. Please try again later."}, 429)
+    _share_rate[client_ip].append(now)
+
     short_id = str(uuid.uuid4())[:8]
     state.shared_content.set(short_id, {
         "kind": kind, "content": content,
@@ -42,15 +69,15 @@ async def view_shared(share_id: str):
     if not item:
         return HTMLResponse("<h1>Not found</h1>", status_code=404)
     kind = item["kind"]
-    repo_name = item["repo_name"]
+    repo_name = html_mod.escape(item["repo_name"])
     content_raw = item["content"]
     content_escaped = json.dumps(content_raw)
     desc_text = re.sub(r'[#*`\[\]()]', '', content_raw)[:200].replace('\n', ' ').strip()
     if len(content_raw) > 200:
         desc_text += "..."
-    desc_safe = desc_text.replace('"', '&quot;').replace('<', '&lt;').replace('>', '&gt;')
-    title_safe = f"{repo_name} - {kind.title()} | RepoLM"
-    preview_text = re.sub(r'[#*`\[\]()]', '', content_raw)[:500].replace('\n', '<br>').replace('<', '&lt;').replace('>', '&gt;')
+    desc_safe = html_mod.escape(desc_text, quote=True)
+    title_safe = html_mod.escape(f"{repo_name} - {kind.title()} | RepoLM")
+    preview_text = html_mod.escape(re.sub(r'[#*`\[\]()]', '', content_raw)[:500]).replace('\n', '<br>')
     kind_map = {"overview": "TechArticle", "podcast": "PodcastEpisode", "slides": "PresentationDigitalDocument"}
     schema_type = kind_map.get(kind, "Article")
     json_ld = json.dumps({

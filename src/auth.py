@@ -36,7 +36,7 @@ def _get_client_ip(request: Request) -> str:
     """Extract client IP, respecting X-Forwarded-For."""
     forwarded = request.headers.get("x-forwarded-for", "")
     if forwarded:
-        return forwarded.split(",")[0].strip()
+        return forwarded.split(",")[-1].strip()
     return request.client.host if request.client else "unknown"
 
 
@@ -49,7 +49,7 @@ async def _verify_captcha(token: str) -> bool:
     if not secret or not site_key:
         return True  # Skip if not fully configured
     if not token:
-        return True  # Frontend didn't load CAPTCHA script, don't block
+        return False  # Keys are configured but no token provided — block
     try:
         async with httpx.AsyncClient(timeout=5) as client:
             resp = await client.post("https://www.google.com/recaptcha/api/siteverify",

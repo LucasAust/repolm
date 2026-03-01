@@ -327,8 +327,11 @@ async def upload_zip(request: Request):
     for info in zf.infolist():
         if info.is_dir():
             continue
+        # Zip slip protection
+        name = os.path.normpath(info.filename)
+        if name.startswith('..') or name.startswith('/') or '..' in name.split(os.sep):
+            continue
         # Skip hidden/OS files
-        name = info.filename
         if any(part.startswith(".") or part == "__MACOSX" for part in name.split("/")):
             continue
         try:

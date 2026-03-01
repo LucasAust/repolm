@@ -2,6 +2,7 @@
 RepoLM — SEO routes: public repo pages, sitemap.xml, robots.txt, OG images.
 """
 
+import html
 import json
 import re
 import time
@@ -29,13 +30,13 @@ async def public_repo_page(owner: str, name: str):
             status_code=404,
         )
 
-    repo_name = overview["repo_name"]
-    owner_name = overview["owner"]
+    repo_name = html.escape(overview["repo_name"])
+    owner_name = html.escape(overview["owner"])
     content = overview["overview"]
     desc_raw = re.sub(r'[#*`\[\]()]', '', content)[:200].replace('\n', ' ').strip()
-    desc_safe = desc_raw.replace('"', '&quot;').replace('<', '&lt;').replace('>', '&gt;')
-    title = f"{owner_name}/{repo_name} Explained — Architecture & Overview | RepoLM"
-    canonical = f"{BASE_URL}/repo/{owner_name}/{repo_name}"
+    desc_safe = html.escape(desc_raw, quote=True)
+    title = html.escape(f"{owner_name}/{repo_name} Explained — Architecture & Overview | RepoLM")
+    canonical = f"{BASE_URL}/repo/{html.escape(overview['owner'])}/{html.escape(overview['repo_name'])}"
     languages = overview.get("languages") or ""
     file_count = overview.get("file_count") or 0
     content_escaped = json.dumps(content)

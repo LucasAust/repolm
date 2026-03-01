@@ -20,16 +20,19 @@ TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 def _require_admin(request: Request) -> bool:
     """Check admin API key. Returns True if unauthorized."""
     key = ADMIN_API_KEY or API_KEY
-    if key:
-        req_key = request.headers.get("x-api-key", "") or request.query_params.get("key", "")
-        if req_key != key:
-            return True
+    if not key:
+        return True  # Deny access when no admin key is configured
+    req_key = request.headers.get("x-api-key", "")
+    if req_key != key:
+        return True
     return False
 
 
 @router.get("/admin", response_class=HTMLResponse)
-async def admin_dashboard():
+async def admin_dashboard(request: Request):
     """Admin dashboard page."""
+    if _require_admin(request):
+        return JSONResponse({"error": "Unauthorized"}, 401)
     return HTMLResponse(TEMPLATES_DIR.joinpath("admin.html").read_text())
 
 

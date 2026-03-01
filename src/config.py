@@ -8,7 +8,7 @@ import logging
 logger = logging.getLogger("repolm")
 
 # ── CORS ──
-ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "*").split(",")
+ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "https://repolm.com").split(",")
 
 # ── Startup Validation ──
 def validate_config():
