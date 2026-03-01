@@ -235,7 +235,8 @@ async def add_repo(request: Request):
         if balance < cost:
             ip_ctx.release()
             return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
-        await db_async.spend_tokens(user["id"], cost, "Ingest repo")
+        if not await db_async.spend_tokens(user["id"], cost, "Ingest repo"):
+            return JSONResponse({"error": "insufficient_tokens"}, 402)
 
     repo_id = str(uuid.uuid4())[:8]
     await db_async.create_job(repo_id, kind="ingest", repo_id=repo_id)
@@ -283,7 +284,8 @@ async def upload_folder(request: Request):
         balance = await db_async.get_token_balance(user["id"])
         if balance < cost:
             return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
-        await db_async.spend_tokens(user["id"], cost, "Upload folder")
+        if not await db_async.spend_tokens(user["id"], cost, "Upload folder"):
+            return JSONResponse({"error": "insufficient_tokens"}, 402)
 
     repo_id = str(uuid.uuid4())[:8]
     await db_async.create_job(repo_id, kind="upload", repo_id=repo_id)
@@ -349,7 +351,8 @@ async def upload_zip(request: Request):
         balance = await db_async.get_token_balance(user["id"])
         if balance < cost:
             return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
-        await db_async.spend_tokens(user["id"], cost, "Upload zip")
+        if not await db_async.spend_tokens(user["id"], cost, "Upload zip"):
+            return JSONResponse({"error": "insufficient_tokens"}, 402)
 
     repo_id = str(uuid.uuid4())[:8]
     await db_async.create_job(repo_id, kind="upload", repo_id=repo_id)

@@ -1357,6 +1357,7 @@ function repolm() {
         },
 
         async submitAuth() {
+            if (this.authLoading) return;
             this.authError = '';
             this.authLoading = true;
             const endpoint = this.authMode === 'login' ? '/auth/login' : '/auth/signup';
@@ -1921,6 +1922,7 @@ function repolm() {
         },
 
         async doGenerate(kind) {
+            if (this.generating) return;
             this.generating = true;
             this.genMessage = `Generating ${kind}...`;
             this.streamWordCount = 0;

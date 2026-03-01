@@ -70,7 +70,8 @@ async def api_ingest_repo(request: Request):
     balance = await db_async.get_token_balance(user["id"])
     if balance < cost:
         return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
-    await db_async.spend_tokens(user["id"], cost, "API: Ingest repo")
+    if not await db_async.spend_tokens(user["id"], cost, "API: Ingest repo"):
+        return JSONResponse({"error": "insufficient_tokens"}, 402)
 
     repo_id = str(uuid.uuid4())[:8]
     state.repos.set(repo_id, {"status": "queued", "message": "Starting...", "files": [], "text": "", "data": {}})
@@ -125,7 +126,8 @@ async def api_generate(repo_id: str, request: Request):
     balance = await db_async.get_token_balance(user["id"])
     if balance < cost:
         return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
-    await db_async.spend_tokens(user["id"], cost, f"API: Generate {kind}")
+    if not await db_async.spend_tokens(user["id"], cost, f"API: Generate {kind}"):
+        return JSONResponse({"error": "insufficient_tokens"}, 402)
 
     from routes.generate import run_generate
     job_id = str(uuid.uuid4())[:8]
@@ -239,7 +241,8 @@ async def api_analyze(request: Request):
         }, 402)
 
     # Step 1: Ingest
-    await db_async.spend_tokens(user["id"], ingest_cost, "API: Ingest repo")
+    if not await db_async.spend_tokens(user["id"], ingest_cost, "API: Ingest repo"):
+        return JSONResponse({"error": "insufficient_tokens"}, 402)
     repo_id = str(uuid.uuid4())[:8]
     state.repos.set(repo_id, {"status": "queued", "message": "Starting...", "files": [], "text": "", "data": {}})
     status, _ = ingest_queue.submit(repo_id, run_ingest, repo_id, url)
@@ -254,7 +257,8 @@ async def api_analyze(request: Request):
         }, 500)
 
     # Step 2: Generate
-    await db_async.spend_tokens(user["id"], gen_cost, f"API: Generate {kind}")
+    if not await db_async.spend_tokens(user["id"], gen_cost, f"API: Generate {kind}"):
+        return JSONResponse({"error": "insufficient_tokens"}, 402)
     from routes.generate import run_generate
     job_id = str(uuid.uuid4())[:8]
     await db_async.create_job(job_id, kind="generate", repo_id=repo_id)

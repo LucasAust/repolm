@@ -79,7 +79,8 @@ async def generate(repo_id: str, request: Request):
         balance = await db_async.get_token_balance(user["id"])
         if balance < cost:
             return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
-        await db_async.spend_tokens(user["id"], cost, f"Generate {kind}")
+        if not await db_async.spend_tokens(user["id"], cost, f"Generate {kind}"):
+            return JSONResponse({"error": "insufficient_tokens"}, 402)
     job_id = str(uuid.uuid4())[:8]
     await db_async.create_job(job_id, kind="generate", repo_id=repo_id)
 
@@ -123,7 +124,8 @@ async def generate_stream(repo_id: str, request: Request):
         balance = await db_async.get_token_balance(user["id"])
         if balance < cost:
             return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
-        await db_async.spend_tokens(user["id"], cost, f"Generate {kind}")
+        if not await db_async.spend_tokens(user["id"], cost, f"Generate {kind}"):
+            return JSONResponse({"error": "insufficient_tokens"}, 402)
     else:
         if kind == "overview":
             ip = request.client.host if request.client else "unknown"
@@ -267,7 +269,8 @@ async def chat_stream(repo_id: str, request: Request):
         if balance < cost:
             sse_ctx.release()
             return JSONResponse({"error": "insufficient_tokens", "required": cost, "balance": balance}, 402)
-        await db_async.spend_tokens(user["id"], cost, "Immersive question" if is_immersive else "Chat message")
+        if not await db_async.spend_tokens(user["id"], cost, "Immersive question" if is_immersive else "Chat message"):
+            return JSONResponse({"error": "insufficient_tokens"}, 402)
 
     history = body.get("history", [])
 
@@ -375,7 +378,8 @@ async def chat(repo_id: str, request: Request):
         prompt = f"Repository context:\n{text}\n\nUser question: {message}"
     try:
         if user:
-            await db_async.spend_tokens(user["id"], cost, "Immersive question" if is_immersive else "Chat message")
+            if not await db_async.spend_tokens(user["id"], cost, "Immersive question" if is_immersive else "Chat message"):
+                return JSONResponse({"error": "insufficient_tokens"}, 402)
         result = call_llm(system, prompt)
         new_balance = await db_async.get_token_balance(user["id"]) if user else None
         return {"response": result, "token_cost": cost, "balance": new_balance}

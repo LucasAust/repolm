@@ -149,9 +149,10 @@ async def signup(request: Request):
     ref_code = body.get("referral_code", "").strip()
     referrer = await db_async.get_user_by_referral(ref_code) if ref_code else None
 
-    signup_tokens = 10
+    from config import DEFAULT_SIGNUP_TOKENS
+    signup_tokens = DEFAULT_SIGNUP_TOKENS
     if referrer:
-        signup_tokens = 15  # Extra 5 for referred users
+        signup_tokens = signup_tokens + 5  # Extra 5 for referred users
 
     referral_note = " (referral)" if referrer else ""
     user_id = await db_async.create_user_with_password(username, email, pw_hash, salt, signup_tokens, referral_note)
