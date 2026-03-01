@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no, viewport-fit=cover">
 <title>RepoLM</title>
 <meta name="theme-color" content="#09090b">
 <meta name="description" content="AI-powered code education. Paste a GitHub repo, get overviews, podcasts, slides, and interactive learning.">
@@ -1083,6 +1083,25 @@
 </div><!-- /flex-row -->
 
 <script>
+// iOS keyboard zoom fix: reset scale on blur
+(function() {
+    if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+        document.addEventListener('focusout', function() {
+            // Reset viewport zoom after keyboard closes
+            setTimeout(function() {
+                var vp = document.querySelector('meta[name=viewport]');
+                if (vp) {
+                    vp.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
+                }
+                // Force scroll reset
+                window.scrollTo(0, 0);
+            }, 100);
+        });
+        // Also prevent zoom via touch
+        document.addEventListener('gesturestart', function(e) { e.preventDefault(); });
+    }
+})();
+
 function repolm() {
     return {
         urlInput: '',
