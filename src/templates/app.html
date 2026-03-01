@@ -410,7 +410,7 @@
         </template>
         <!-- Save repo button -->
         <template x-if="repoReady && user">
-            <button @click="saveRepo()" :disabled="savedDbId && !showSavedCheck" class="text-xs bg-gray-800 hover:bg-gray-700 disabled:bg-gray-800 text-gray-300 px-2.5 py-1.5 rounded-lg transition">
+            <button @click="saveRepo()" :disabled="showSavedCheck" class="text-xs bg-gray-800 hover:bg-gray-700 disabled:bg-gray-800 text-gray-300 px-2.5 py-1.5 rounded-lg transition">
                 <span x-show="showSavedCheck" class="text-green-400">✓ Saved</span>
                 <span x-show="!showSavedCheck">💾 Save</span>
             </button>
