@@ -91,7 +91,8 @@ body::after{
 }
 
 /* Ambient light */
-.hero-glow{position:absolute;top:-200px;left:50%;transform:translateX(-50%);width:900px;height:600px;border-radius:50%;background:radial-gradient(circle,rgba(168,85,247,0.07) 0%,transparent 65%);pointer-events:none;z-index:0}
+.hero-glow{position:absolute;top:-200px;left:50%;transform:translateX(-50%);width:900px;height:600px;border-radius:50%;background:radial-gradient(ellipse at 35% 50%,rgba(168,85,247,0.1) 0%,rgba(56,189,248,0.05) 40%,transparent 65%);pointer-events:none;z-index:0}
+.hero-glow::after{content:'';position:absolute;top:80px;right:-100px;width:500px;height:400px;border-radius:50%;background:radial-gradient(circle,rgba(56,189,248,0.06) 0%,transparent 60%)}
 
 .hero-inner{position:relative;z-index:1;max-width:720px}
 .hero-inner .eyebrow{
@@ -910,32 +911,56 @@ document.addEventListener('DOMContentLoaded',()=>{
           }
         }
 
-        ctx.lineWidth=0.7;
+        ctx.lineWidth=0.8;
 
-        // Rows
-        for(let r=0;r<=ROWS;r++){
-          ctx.beginPath();
-          for(let c=0;c<=COLS;c++){
-            const p=pts[r][c];
-            if(c===0)ctx.moveTo(p.x,p.y);else ctx.lineTo(p.x,p.y);
+        // Color gradient helper: maps position + height to purple→cyan→blue
+        const waveColor=(pos,h,alpha)=>{
+          // pos: 0-1 across grid, h: wave height normalized
+          const hueShift=pos*0.6+Math.abs(h)*0.4; // 0→1
+          // Purple (168,85,247) → Cyan (56,189,248) → Blue (99,102,241)
+          let r,g,b;
+          if(hueShift<0.5){
+            const t=hueShift*2;
+            r=Math.round(168+(56-168)*t);
+            g=Math.round(85+(189-85)*t);
+            b=Math.round(247+(248-247)*t);
+          } else {
+            const t=(hueShift-0.5)*2;
+            r=Math.round(56+(99-56)*t);
+            g=Math.round(189+(102-189)*t);
+            b=Math.round(248+(241-248)*t);
           }
-          const avgZ=pts[r][Math.floor(COLS/2)].z;
-          const alpha=Math.max(0,Math.min(0.35,PERSPECTIVE/avgZ*0.28));
-          ctx.strokeStyle=`rgba(168,85,247,${alpha})`;
-          ctx.stroke();
+          return`rgba(${r},${g},${b},${alpha})`;
+        };
+
+        // Rows — gradient across columns
+        for(let r=0;r<=ROWS;r++){
+          for(let c=0;c<COLS;c++){
+            const p1=pts[r][c],p2=pts[r][c+1];
+            const avgZ=(p1.z+p2.z)/2;
+            const alpha=Math.max(0,Math.min(0.4,PERSPECTIVE/avgZ*0.32));
+            const h=fbm((c+0.5)*0.1+t,r*0.1+t*0.5)/45;
+            ctx.beginPath();
+            ctx.moveTo(p1.x,p1.y);
+            ctx.lineTo(p2.x,p2.y);
+            ctx.strokeStyle=waveColor(c/COLS,h,alpha);
+            ctx.stroke();
+          }
         }
 
-        // Columns
+        // Columns — gradient across rows
         for(let c=0;c<=COLS;c++){
-          ctx.beginPath();
-          for(let r=0;r<=ROWS;r++){
-            const p=pts[r][c];
-            if(r===0)ctx.moveTo(p.x,p.y);else ctx.lineTo(p.x,p.y);
+          for(let r=0;r<ROWS;r++){
+            const p1=pts[r][c],p2=pts[r+1][c];
+            const avgZ=(p1.z+p2.z)/2;
+            const alpha=Math.max(0,Math.min(0.4,PERSPECTIVE/avgZ*0.32));
+            const h=fbm(c*0.1+t,(r+0.5)*0.1+t*0.5)/45;
+            ctx.beginPath();
+            ctx.moveTo(p1.x,p1.y);
+            ctx.lineTo(p2.x,p2.y);
+            ctx.strokeStyle=waveColor((c/COLS*0.3+r/ROWS*0.7),h,alpha);
+            ctx.stroke();
           }
-          const avgZ=pts[Math.floor(ROWS/2)][c].z;
-          const alpha=Math.max(0,Math.min(0.35,PERSPECTIVE/avgZ*0.28));
-          ctx.strokeStyle=`rgba(168,85,247,${alpha})`;
-          ctx.stroke();
         }
 
         frame=requestAnimationFrame(draw);
