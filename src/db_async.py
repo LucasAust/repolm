@@ -449,13 +449,15 @@ async def cache_repo_to_db(repo_id, repo_data):
 
 def sync_cache_repo_to_db(repo_id, repo_data):
     # type: (str, dict) -> None
-    """Sync bridge for background threads — schedules Postgres write on main event loop."""
+    """Sync bridge for background threads — writes to Postgres and waits for completion."""
     if not _main_loop or not _main_loop.is_running():
         logger.warning("sync_cache_repo_to_db: no main loop available for %s", repo_id)
         return
     if _USE_POSTGRES:
         try:
-            asyncio.run_coroutine_threadsafe(_pg.cache_repo(repo_id, repo_data), _main_loop)
+            future = asyncio.run_coroutine_threadsafe(_pg.cache_repo(repo_id, repo_data), _main_loop)
+            future.result(timeout=30)  # wait for Postgres write to complete
+            logger.info("sync_cache_repo_to_db: cached %s to Postgres (%d files)", repo_id, len(repo_data.get("files", [])))
         except Exception:
             logger.exception("sync_cache_repo_to_db failed for %s", repo_id)
     try:

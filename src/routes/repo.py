@@ -322,18 +322,26 @@ async def get_files(repo_id: str):
     repo = await db_async.get_repo_with_fallback(repo_id)
     if not repo:
         return JSONResponse({"error": "Not found"}, 404)
-    return [{"path": f["path"], "size": f["size"], "is_priority": f["is_priority"]} for f in repo.get("files", [])]
+    files = repo.get("files", [])
+    logger.info("get_files: repo %s → %d files (status=%s)", repo_id, len(files), repo.get("status"))
+    return [{"path": f["path"], "size": f["size"], "is_priority": f.get("is_priority", False)} for f in files]
 
 
 @router.get("/api/repo/{repo_id}/file")
 async def get_file(repo_id: str, path: str):
     repo = await db_async.get_repo_with_fallback(repo_id)
     if not repo:
+        logger.warning("get_file: repo %s not found in any cache layer", repo_id)
         return JSONResponse({"error": "Not found"}, 404)
-    for f in repo.get("files", []):
+    files = repo.get("files", [])
+    if not files:
+        logger.warning("get_file: repo %s has no files (status=%s)", repo_id, repo.get("status"))
+        return JSONResponse({"error": "No files loaded"}, 404)
+    for f in files:
         if f["path"] == path:
             return {"path": f["path"], "content": f["content"], "size": f["size"]}
-    return JSONResponse({"error": "File not found"}, 404)
+    logger.warning("get_file: path %s not in repo %s (%d files loaded)", path, repo_id, len(files))
+    return JSONResponse({"error": "File not found in ingested files"}, 404)
 
 
 # ── Persistence Routes (authenticated) ──
