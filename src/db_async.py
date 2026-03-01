@@ -349,15 +349,17 @@ async def get_admin_stats() -> dict:
     return await _run(_sync.get_admin_stats)
 
 
-# ── State (repo cache) ──
+# ── Repo Cache (memory → Redis → Postgres) ──
 
-async def get_repo_with_fallback(repo_id: str) -> Optional[dict]:
+async def get_repo_with_fallback(repo_id):
+    # type: (str) -> Optional[dict]
+    """Load repo: memory → Redis → Postgres."""
     # 1. In-memory (fast, no I/O)
     repo = _state.repos.get(repo_id)
     if repo:
         return repo
 
-    # 2. Redis (native async, no executor needed)
+    # 2. Redis
     try:
         import redis_client
         if redis_client.is_available():
@@ -368,7 +370,7 @@ async def get_repo_with_fallback(repo_id: str) -> Optional[dict]:
     except Exception:
         pass
 
-    # 3. Postgres repo_cache (native async, survives deploys)
+    # 3. Postgres
     if _USE_POSTGRES:
         try:
             pg_repo = await _pg.load_repo(repo_id)
@@ -376,33 +378,73 @@ async def get_repo_with_fallback(repo_id: str) -> Optional[dict]:
                 _state.repos.set(repo_id, pg_repo)
                 return pg_repo
         except Exception:
-            pass
+            logger.exception("Failed to load repo %s from Postgres", repo_id)
 
-    # 4. SQLite cold storage (sync fallback for local dev)
-    result = await _run(_state.get_repo_with_fallback, repo_id)
-    return result
+    return None
 
 
-async def find_cached_repo_by_url(url: str) -> Optional[str]:
+def sync_get_repo_with_fallback(repo_id):
+    # type: (str) -> Optional[dict]
+    """Sync bridge for background threads — memory → Postgres via event loop."""
+    repo = _state.repos.get(repo_id)
+    if repo:
+        return repo
     if _USE_POSTGRES:
         try:
-            result = await _pg.find_cached_repo_by_url(url)
-            if result:
-                return result
+            loop = asyncio.get_running_loop()
+            future = asyncio.run_coroutine_threadsafe(_pg.load_repo(repo_id), loop)
+            pg_repo = future.result(timeout=10)
+            if pg_repo and pg_repo.get("status") == "ready":
+                _state.repos.set(repo_id, pg_repo)
+                return pg_repo
         except Exception:
-            pass
-    return await _run(_state.find_cached_repo_by_url, url)
+            logger.exception("sync_get_repo_with_fallback failed for %s", repo_id)
+    return None
 
 
-async def cache_repo_to_db(repo_id: str, repo_data: dict):
-    # Always write to SQLite for local dev fallback
-    await _run(_state.cache_repo_to_db, repo_id, repo_data)
-    # Also write to Postgres if available (persistent across deploys)
+async def find_cached_repo_by_url(url):
+    # type: (str) -> Optional[str]
+    if _USE_POSTGRES:
+        try:
+            return await _pg.find_cached_repo_by_url(url)
+        except Exception:
+            logger.exception("find_cached_repo_by_url failed")
+    return None
+
+
+async def cache_repo_to_db(repo_id, repo_data):
+    # type: (str, dict) -> None
+    """Cache repo to Postgres (and Redis)."""
     if _USE_POSTGRES:
         try:
             await _pg.cache_repo(repo_id, repo_data)
         except Exception:
             logger.exception("Failed to cache repo %s to Postgres", repo_id)
+    # Also push to Redis
+    try:
+        import redis_client
+        if redis_client.is_available():
+            await redis_client.cache_repo(repo_id, repo_data)
+    except Exception:
+        pass
+
+
+def sync_cache_repo_to_db(repo_id, repo_data):
+    # type: (str, dict) -> None
+    """Sync bridge for background threads — schedules Postgres write on event loop."""
+    if _USE_POSTGRES:
+        try:
+            loop = asyncio.get_running_loop()
+            asyncio.run_coroutine_threadsafe(_pg.cache_repo(repo_id, repo_data), loop)
+        except Exception:
+            logger.exception("sync_cache_repo_to_db failed for %s", repo_id)
+    try:
+        import redis_client
+        if redis_client.is_available():
+            loop = asyncio.get_running_loop()
+            asyncio.run_coroutine_threadsafe(redis_client.cache_repo(repo_id, repo_data), loop)
+    except Exception:
+        pass
 
 
 # ── Auth (signup/login) ──

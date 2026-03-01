@@ -29,7 +29,7 @@ logger = logging.getLogger("repolm")
 
 def run_generate(job_id, repo_id, kind, depth, expertise):
     """Background worker: generate content. Runs in thread pool (sync is fine)."""
-    repo = state.get_repo_with_fallback(repo_id)
+    repo = db_async.sync_get_repo_with_fallback(repo_id)
     if not repo or repo["status"] != "ready":
         db_async.sync_update_job(job_id, status="error", message="Repo not ready")
         return

@@ -1,24 +1,20 @@
 """
-RepoLM — Shared state: in-memory stores with TTL, Redis-backed when available,
-SQLite-backed repo cache as cold storage, LRU eviction, and disk cleanup.
+RepoLM — Shared state: in-memory stores with TTL, LRU eviction, and disk cleanup.
+Repo cache persistence is handled by db_postgres (Postgres) and redis_client.
 """
 
 import asyncio
 import logging
 import os
 import shutil
-import sqlite3
 import time
 import threading
-import zlib
 import json
-from contextlib import contextmanager
 from typing import Any, Optional
 
 logger = logging.getLogger("repolm")
 
 _DATA_DIR = os.environ.get("DATA_DIR", os.path.dirname(__file__))
-REPO_CACHE_DB = os.path.join(_DATA_DIR, "repolm_repo_cache.db")
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
 MAX_DISK_USAGE_BYTES = 5 * 1024 * 1024 * 1024  # 5GB alert threshold
 
@@ -26,7 +22,7 @@ MAX_DISK_USAGE_BYTES = 5 * 1024 * 1024 * 1024  # 5GB alert threshold
 class TTLDict:
     """Dict with per-entry TTL and LRU eviction."""
 
-    def __init__(self, default_ttl: int = 7200, name: str = "store", max_size: int = 0):
+    def __init__(self, default_ttl=7200, name="store", max_size=0):
         self._data = {}
         self._expires = {}
         self._access_order = []  # for LRU
@@ -35,11 +31,11 @@ class TTLDict:
         self.name = name
         self.max_size = max_size  # 0 = unlimited
 
-    def get(self, key: str) -> Optional[Any]:
+    def get(self, key):
+        # type: (str) -> Optional[Any]
         with self._lock:
             if key in self._data:
                 if self._expires.get(key, float('inf')) > time.time():
-                    # Update LRU
                     if key in self._access_order:
                         self._access_order.remove(key)
                     self._access_order.append(key)
@@ -51,9 +47,9 @@ class TTLDict:
                         self._access_order.remove(key)
         return None
 
-    def set(self, key: str, value: Any, ttl: int = None):
+    def set(self, key, value, ttl=None):
+        # type: (str, Any, Optional[int]) -> None
         with self._lock:
-            # LRU eviction
             if self.max_size > 0 and key not in self._data and len(self._data) >= self.max_size:
                 if self._access_order:
                     evict_key = self._access_order.pop(0)
@@ -65,26 +61,26 @@ class TTLDict:
                 self._access_order.remove(key)
             self._access_order.append(key)
 
-    def delete(self, key: str):
+    def delete(self, key):
         with self._lock:
             self._data.pop(key, None)
             self._expires.pop(key, None)
             if key in self._access_order:
                 self._access_order.remove(key)
 
-    def __contains__(self, key: str) -> bool:
+    def __contains__(self, key):
         return self.get(key) is not None
 
-    def __getitem__(self, key: str) -> Any:
+    def __getitem__(self, key):
         val = self.get(key)
         if val is None:
             raise KeyError(key)
         return val
 
-    def __setitem__(self, key: str, value: Any):
+    def __setitem__(self, key, value):
         self.set(key, value)
 
-    def cleanup(self) -> int:
+    def cleanup(self):
         now = time.time()
         removed = 0
         with self._lock:
@@ -97,7 +93,7 @@ class TTLDict:
                 removed += 1
         return removed
 
-    def size(self) -> int:
+    def size(self):
         with self._lock:
             return len(self._data)
 
@@ -110,144 +106,19 @@ audio_jobs = TTLDict(default_ttl=3600, name="audio_jobs")
 shared_content = TTLDict(default_ttl=86400, name="shared_content")
 
 
-# ── SQLite Repo Cache (cross-worker shared) ──
-def _init_repo_cache_db():
-    conn = sqlite3.connect(REPO_CACHE_DB)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS repo_cache (
-            repo_id TEXT PRIMARY KEY,
-            status TEXT NOT NULL,
-            message TEXT DEFAULT '',
-            data_json TEXT,
-            files_json BLOB,
-            repo_text BLOB,
-            created_at REAL DEFAULT (unixepoch()),
-            accessed_at REAL DEFAULT (unixepoch())
-        )
-    """)
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_rc_accessed ON repo_cache(accessed_at)")
-    conn.commit()
-    conn.close()
-
-
-_init_repo_cache_db()
-
-
-def cache_repo_to_db(repo_id: str, repo_data: dict):
-    """Store repo in SQLite with compressed text and files."""
-    try:
-        data_json = json.dumps(repo_data.get("data", {}))
-        files_json = zlib.compress(json.dumps(repo_data.get("files", [])).encode())
-        text_blob = zlib.compress((repo_data.get("text", "") or "").encode())
-        conn = sqlite3.connect(REPO_CACHE_DB)
-        conn.execute(
-            """INSERT OR REPLACE INTO repo_cache (repo_id, status, message, data_json, files_json, repo_text, created_at, accessed_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (repo_id, repo_data.get("status", "ready"), repo_data.get("message", ""),
-             data_json, files_json, text_blob, time.time(), time.time())
-        )
-        conn.commit()
-        conn.close()
-
-        # Also cache to Postgres + Redis if available
-        try:
-            import asyncio as _aio
-            loop = _aio.get_running_loop()
-            # Postgres (survives deploys)
-            if os.environ.get("DATABASE_URL"):
-                try:
-                    import db_postgres as _pg
-                    loop.create_task(_pg.cache_repo(repo_id, repo_data))
-                except ImportError:
-                    pass
-            # Redis (fast cache)
-            try:
-                import redis_client
-                if redis_client.is_available():
-                    loop.create_task(redis_client.cache_repo(repo_id, repo_data))
-            except ImportError:
-                pass
-        except RuntimeError:
-            pass  # no event loop (e.g. startup), skip async caches
-    except Exception:
-        logger.exception("Failed to cache repo %s to DB", repo_id)
-
-
-def load_repo_from_db(repo_id: str) -> Optional[dict]:
-    """Load repo from SQLite cache. Returns dict or None."""
-    try:
-        conn = sqlite3.connect(REPO_CACHE_DB)
-        conn.row_factory = sqlite3.Row
-        row = conn.execute("SELECT * FROM repo_cache WHERE repo_id=?", (repo_id,)).fetchone()
-        if not row:
-            conn.close()
-            return None
-        conn.execute("UPDATE repo_cache SET accessed_at=? WHERE repo_id=?", (time.time(), repo_id))
-        conn.commit()
-        result = {
-            "status": row["status"],
-            "message": row["message"],
-            "data": json.loads(row["data_json"]) if row["data_json"] else {},
-            "files": json.loads(zlib.decompress(row["files_json"]).decode()) if row["files_json"] else [],
-            "text": zlib.decompress(row["repo_text"]).decode() if row["repo_text"] else "",
-        }
-        conn.close()
-        return result
-    except Exception:
-        logger.exception("Failed to load repo %s from DB", repo_id)
-        return None
-
-
-def get_repo_with_fallback(repo_id: str) -> Optional[dict]:
-    """Try memory first, then SQLite cold storage. Redis is handled in db_async."""
-    # 1. In-memory
-    repo = repos.get(repo_id)
-    if repo:
-        return repo
-
-    # 2. SQLite cold storage
-    db_repo = load_repo_from_db(repo_id)
-    if db_repo and db_repo["status"] == "ready":
-        repos.set(repo_id, db_repo)
-        return db_repo
-    return None
-
-
-def find_cached_repo_by_url(url: str) -> Optional[str]:
-    """Find a recently cached repo_id by URL (< 2 hours old). Returns repo_id or None."""
-    try:
-        normalized = url.strip().lower().rstrip("/").replace(".git", "")
-        conn = sqlite3.connect(REPO_CACHE_DB)
-        conn.row_factory = sqlite3.Row
-        row = conn.execute(
-            """SELECT repo_id FROM repo_cache
-               WHERE status='ready' AND json_extract(data_json, '$.url') LIKE ?
-               AND accessed_at > ? ORDER BY accessed_at DESC LIMIT 1""",
-            (f"%{normalized.split('github.com/')[-1]}%", time.time() - 7200)
-        ).fetchone()
-        conn.close()
-        if row:
-            return row["repo_id"]
-    except Exception:
-        logger.exception("find_cached_repo_by_url failed")
-    return None
-
-
 # ── Disk Cleanup ──
-def cleanup_disk() -> dict:
+def cleanup_disk():
     """Clean up old audio, clone, and PPTX files. Returns summary."""
     cleaned = {"audio_dirs": 0, "clone_dirs": 0, "pptx_files": 0, "bytes_freed": 0}
     now = time.time()
 
-    # Audio dirs older than 2 hours
     if os.path.exists(OUTPUT_DIR):
         for entry in os.listdir(OUTPUT_DIR):
             path = os.path.join(OUTPUT_DIR, entry)
             if os.path.isdir(path):
                 try:
                     mtime = os.path.getmtime(path)
-                    if now - mtime > 7200:  # 2 hours
+                    if now - mtime > 7200:
                         size = _dir_size(path)
                         shutil.rmtree(path, ignore_errors=True)
                         cleaned["audio_dirs"] += 1
@@ -255,7 +126,6 @@ def cleanup_disk() -> dict:
                 except Exception:
                     pass
 
-    # PPTX files older than 1 hour
     if os.path.exists(OUTPUT_DIR):
         for entry in os.listdir(OUTPUT_DIR):
             path = os.path.join(OUTPUT_DIR, entry)
@@ -269,7 +139,6 @@ def cleanup_disk() -> dict:
                 except Exception:
                     pass
 
-    # Clone dirs in /tmp older than 30 minutes
     import tempfile
     tmp = tempfile.gettempdir()
     for entry in os.listdir(tmp):
@@ -290,21 +159,18 @@ def cleanup_disk() -> dict:
     return cleaned
 
 
-def get_disk_usage() -> dict:
+def get_disk_usage():
     """Get disk usage info for health endpoint."""
     output_size = _dir_size(OUTPUT_DIR) if os.path.exists(OUTPUT_DIR) else 0
-    cache_db_size = os.path.getsize(REPO_CACHE_DB) if os.path.exists(REPO_CACHE_DB) else 0
-    total = output_size + cache_db_size
     return {
         "output_dir_bytes": output_size,
-        "repo_cache_db_bytes": cache_db_size,
-        "total_bytes": total,
-        "alert": total > MAX_DISK_USAGE_BYTES,
+        "total_bytes": output_size,
+        "alert": output_size > MAX_DISK_USAGE_BYTES,
         "max_bytes": MAX_DISK_USAGE_BYTES,
     }
 
 
-def _dir_size(path: str) -> int:
+def _dir_size(path):
     total = 0
     try:
         for dirpath, dirnames, filenames in os.walk(path):
@@ -335,12 +201,9 @@ async def cleanup_stores():
             _sync_db.cleanup_rate_limits()
         except Exception:
             pass
-        # Disk cleanup every 30 min (every 3 cycles)
-        # Run in executor to avoid blocking the event loop (os.walk + shutil.rmtree)
         if cycle % 3 == 0:
             try:
-                import asyncio as _aio
-                await _aio.get_event_loop().run_in_executor(None, cleanup_disk)
+                await asyncio.get_event_loop().run_in_executor(None, cleanup_disk)
             except Exception:
                 logger.exception("Disk cleanup failed")
         if total:

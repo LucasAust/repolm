@@ -59,31 +59,9 @@ def _reconstruct_files_from_text(repo_text, file_index):
     return files
 
 
-async def find_cached_repo_any(url: str):
-    """Find a cached repo by URL — no TTL limit, works for all URL types."""
-    import sqlite3
-    import time as _time
-    try:
-        normalized = url.strip().lower().rstrip("/").replace(".git", "")
-        conn = sqlite3.connect(state.REPO_CACHE_DB)
-        conn.row_factory = sqlite3.Row
-        # For github URLs, match by path; for others, match exactly
-        if "github.com/" in normalized:
-            pattern = "%" + normalized.split("github.com/")[-1] + "%"
-        else:
-            pattern = "%" + normalized + "%"
-        row = conn.execute(
-            """SELECT repo_id FROM repo_cache
-               WHERE status='ready' AND json_extract(data_json, '$.url') LIKE ?
-               ORDER BY accessed_at DESC LIMIT 1""",
-            (pattern,)
-        ).fetchone()
-        conn.close()
-        if row:
-            return row["repo_id"]
-    except Exception:
-        logger.exception("find_cached_repo_any failed")
-    return None
+async def find_cached_repo_any(url):
+    """Find a cached repo by URL via Postgres."""
+    return await db_async.find_cached_repo_by_url(url)
 
 
 def run_ingest(repo_id, url):
@@ -110,7 +88,7 @@ def run_ingest(repo_id, url):
             "data": repo_data, "files": file_list, "text": text,
         }
         state.repos.set(repo_id, repo_entry)
-        state.cache_repo_to_db(repo_id, repo_entry)
+        db_async.sync_cache_repo_to_db(repo_id, repo_entry)
         db_async.sync_update_job(repo_id, status="ready", message="Ready",
                            result=json.dumps(repo_data))
     except Exception as e:
@@ -193,7 +171,7 @@ def run_upload_ingest(repo_id, files_data):
             "data": repo_data, "files": processed, "text": repo_text,
         }
         state.repos.set(repo_id, repo_entry)
-        state.cache_repo_to_db(repo_id, repo_entry)
+        db_async.sync_cache_repo_to_db(repo_id, repo_entry)
         db_async.sync_update_job(repo_id, status="ready", message="Ready",
                            result=json.dumps(repo_data))
     except Exception as e:
@@ -387,7 +365,7 @@ async def save_repo_to_account(repo_id: str, request: Request):
         languages=data["languages"], repo_text=repo["text"], file_index=file_index
     )
     # Also ensure cold cache has the full files for reload
-    state.cache_repo_to_db(repo_id, repo)
+    await db_async.cache_repo_to_db(repo_id, repo)
     return {"db_id": db_id, "cache_repo_id": repo_id}
 
 
