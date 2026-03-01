@@ -288,8 +288,6 @@ async def chat_stream(repo_id: str, request: Request):
                     chunk_count += 1
                     yield sse_format(chunk, "chunk")
                 logger.info("Chat stream done for repo %s — %d chunks", repo_id, chunk_count)
-                if user:
-                    await db_async.spend_tokens(user["id"], cost, "Immersive question" if is_immersive else "Chat message")
                 new_balance = await db_async.get_token_balance(user["id"]) if user else None
                 yield sse_format(json.dumps({"cost": cost, "balance": new_balance}), "meta")
                 yield sse_format("", "done")
@@ -339,9 +337,9 @@ async def chat(repo_id: str, request: Request):
             text = text[:150_000] + "\n\n[... truncated ...]"
         prompt = f"Repository context:\n{text}\n\nUser question: {message}"
     try:
-        result = call_llm(system, prompt)
         if user:
             await db_async.spend_tokens(user["id"], cost, "Immersive question" if is_immersive else "Chat message")
+        result = call_llm(system, prompt)
         new_balance = await db_async.get_token_balance(user["id"]) if user else None
         return {"response": result, "token_cost": cost, "balance": new_balance}
     except Exception as e:

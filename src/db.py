@@ -196,6 +196,18 @@ def init_db():
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_signup_rate_ip ON signup_rate_limits(ip_address, created_at)")
 
+        # Login rate limiting table
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS login_rate_limits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ip_address TEXT NOT NULL,
+            email TEXT NOT NULL,
+            created_at REAL DEFAULT (unixepoch())
+        )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_login_rate_ip ON login_rate_limits(ip_address, created_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_login_rate_email ON login_rate_limits(email, created_at)")
+
         # Job status table (multi-worker safe)
         conn.executescript("""
         CREATE TABLE IF NOT EXISTS job_status (
@@ -439,12 +451,14 @@ def get_token_balance(user_id: int) -> int:
 
 
 def spend_tokens(user_id: int, amount: int, description: str) -> bool:
-    """Deduct tokens. Returns True if successful, False if insufficient."""
+    """Deduct tokens atomically. Returns True if successful, False if insufficient."""
     with db() as conn:
-        row = conn.execute("SELECT tokens FROM users WHERE id=?", (user_id,)).fetchone()
-        if not row or row["tokens"] < amount:
+        cursor = conn.execute(
+            "UPDATE users SET tokens = tokens - ? WHERE id = ? AND tokens >= ?",
+            (amount, user_id, amount),
+        )
+        if cursor.rowcount != 1:
             return False
-        conn.execute("UPDATE users SET tokens = tokens - ? WHERE id=?", (amount, user_id))
         conn.execute("INSERT INTO token_transactions (user_id, amount, action, description) VALUES (?,?,?,?)",
                      (user_id, -amount, "spend", description))
         return True
@@ -922,6 +936,38 @@ def record_signup_attempt(ip_address: str):
     """Record a signup attempt from an IP."""
     with db() as conn:
         conn.execute("INSERT INTO signup_rate_limits (ip_address) VALUES (?)", (ip_address,))
+
+
+def check_login_rate_limit(ip_address: str, email: str, max_per_email: int = 5,
+                           max_per_ip: int = 20, window_seconds: int = 900) -> bool:
+    """Check if login is allowed. Returns True if ALLOWED."""
+    cutoff = time.time() - window_seconds
+    with db() as conn:
+        by_email = conn.execute(
+            "SELECT COUNT(*) as cnt FROM login_rate_limits WHERE email=? AND created_at>?",
+            (email, cutoff)).fetchone()
+        if by_email["cnt"] >= max_per_email:
+            return False
+        by_ip = conn.execute(
+            "SELECT COUNT(*) as cnt FROM login_rate_limits WHERE ip_address=? AND created_at>?",
+            (ip_address, cutoff)).fetchone()
+        if by_ip["cnt"] >= max_per_ip:
+            return False
+        return True
+
+
+def record_login_attempt(ip_address: str, email: str):
+    """Record a login attempt."""
+    with db() as conn:
+        conn.execute("INSERT INTO login_rate_limits (ip_address, email) VALUES (?,?)",
+                     (ip_address, email))
+
+
+def cleanup_login_rate_limits():
+    """Purge old login rate limit records."""
+    cutoff = time.time() - 3600
+    with db() as conn:
+        conn.execute("DELETE FROM login_rate_limits WHERE created_at<?", (cutoff,))
 
 
 def cleanup_signup_rate_limits():

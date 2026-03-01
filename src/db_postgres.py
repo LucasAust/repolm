@@ -92,6 +92,18 @@ async def _create_tables():
         """)
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_signup_rate_ip ON signup_rate_limits(ip_address, created_at)")
 
+        # Login rate limiting table
+        await conn.execute("""
+        CREATE TABLE IF NOT EXISTS login_rate_limits (
+            id SERIAL PRIMARY KEY,
+            ip_address TEXT NOT NULL,
+            email TEXT NOT NULL,
+            created_at DOUBLE PRECISION DEFAULT EXTRACT(EPOCH FROM NOW())
+        )
+        """)
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_login_rate_ip ON login_rate_limits(ip_address, created_at)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_login_rate_email ON login_rate_limits(email, created_at)")
+
         # Migration: add new columns if missing
         for col, default in [("email_verified", "0"), ("verification_token", "NULL")]:
             try:
@@ -1059,6 +1071,32 @@ async def record_signup_attempt(ip_address: str):
     async with pool.acquire() as conn:
         await conn.execute("INSERT INTO signup_rate_limits (ip_address, created_at) VALUES ($1,$2)",
                            ip_address, time.time())
+
+
+async def check_login_rate_limit(ip_address: str, email: str, max_per_email: int = 5,
+                                  max_per_ip: int = 20, window_seconds: int = 900) -> bool:
+    """Returns True if ALLOWED."""
+    cutoff = time.time() - window_seconds
+    pool = _get_pool()
+    async with pool.acquire() as conn:
+        by_email = await conn.fetchrow(
+            "SELECT COUNT(*) as cnt FROM login_rate_limits WHERE email=$1 AND created_at>$2",
+            email, cutoff)
+        if by_email["cnt"] >= max_per_email:
+            return False
+        by_ip = await conn.fetchrow(
+            "SELECT COUNT(*) as cnt FROM login_rate_limits WHERE ip_address=$1 AND created_at>$2",
+            ip_address, cutoff)
+        if by_ip["cnt"] >= max_per_ip:
+            return False
+        return True
+
+
+async def record_login_attempt(ip_address: str, email: str):
+    pool = _get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("INSERT INTO login_rate_limits (ip_address, email, created_at) VALUES ($1,$2,$3)",
+                           ip_address, email, time.time())
 
 
 async def cleanup_signup_rate_limits():

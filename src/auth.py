@@ -204,7 +204,16 @@ async def login(request: Request):
     if not email or not password:
         return JSONResponse({"error": "Email and password required"}, 400)
 
+    # Rate limit: max 5 per email per 15 min, 20 per IP per 15 min
+    client_ip = _get_client_ip(request)
+    allowed = await db_async.check_login_rate_limit(client_ip, email)
+    if not allowed:
+        return JSONResponse({"error": "Too many login attempts. Please try again later."}, 429)
+
     row = await db_async.login_lookup(email)
+
+    # Record attempt regardless of outcome
+    await db_async.record_login_attempt(client_ip, email)
 
     if not row:
         return JSONResponse({"error": "Invalid email or password"}, 401)

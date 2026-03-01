@@ -559,6 +559,19 @@ async def record_signup_attempt(ip_address: str):
     return await _run(_sync.record_signup_attempt, ip_address)
 
 
+async def check_login_rate_limit(ip_address: str, email: str) -> bool:
+    """Returns True if ALLOWED. Max 5/email/15min, 20/IP/15min."""
+    if _USE_POSTGRES:
+        return await _pg.check_login_rate_limit(ip_address, email)
+    return await _run(_sync.check_login_rate_limit, ip_address, email)
+
+
+async def record_login_attempt(ip_address: str, email: str):
+    if _USE_POSTGRES:
+        return await _pg.record_login_attempt(ip_address, email)
+    return await _run(_sync.record_login_attempt, ip_address, email)
+
+
 async def cleanup_signup_rate_limits():
     if _USE_POSTGRES:
         return await _pg.cleanup_signup_rate_limits()
