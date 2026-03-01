@@ -74,12 +74,14 @@
   input,select,textarea{font-size:16px!important}
   /* iOS safe areas */
   .mobile-tab-bar{padding-bottom:env(safe-area-inset-bottom)}
-  /* Prevent iOS keyboard pushing layout */
-  html,body{position:fixed;width:100%;height:100%;overflow:hidden}
-  /* Immersive: stack vertically on mobile */
+  /* Immersive mobile: full-screen answer overlay */
   .immersive-layout{flex-direction:column!important}
-  .immersive-layout .immersive-code{flex:none!important;height:45%;overflow-y:auto}
-  .immersive-layout .immersive-panel{flex:none!important;height:55%;width:100%!important;border-left:none!important;border-top:1px solid #1f2937}
+  .immersive-layout .immersive-code{flex:1 1 auto!important;overflow-y:auto;padding-bottom:100px}
+  .immersive-layout .immersive-panel{display:none!important}
+  .immersive-mobile-input{position:fixed;bottom:56px;left:0;right:0;z-index:45;background:#09090b;border-top:1px solid #1f2937;padding:8px 12px;padding-bottom:calc(8px + env(safe-area-inset-bottom,0px))}
+  .immersive-answer-overlay{position:fixed;inset:0;z-index:55;background:#09090b;display:flex;flex-direction:column}
+  .immersive-answer-overlay .answer-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #1f2937;shrink:0}
+  .immersive-answer-overlay .answer-body{flex:1;overflow-y:auto;padding:16px}
   /* Viewer action buttons: wrap on mobile */
   .viewer-actions{flex-wrap:wrap;gap:4px!important}
   .viewer-actions button,.viewer-actions span{font-size:10px!important;padding:4px 8px!important}
@@ -910,6 +912,46 @@
             </div>
         </div>
 
+        <!-- Mobile immersive input (fixed at bottom) -->
+        <div x-show="mode==='immersive' && currentFile" class="md:hidden immersive-mobile-input">
+            <div class="flex gap-2">
+                <input x-model="immersiveInput" type="text" placeholder="Ask about this file..."
+                    @keydown.enter="sendImmersive();showImmersiveAnswer=true"
+                    class="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500">
+                <button @click="sendImmersive();showImmersiveAnswer=true" class="bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded-lg text-sm font-medium">Ask</button>
+            </div>
+            <div class="flex gap-1 mt-1.5">
+                <button @click="immersiveInput='Explain this';sendImmersive();showImmersiveAnswer=true" class="text-xs text-gray-500 hover:text-purple-400 bg-gray-900 px-2.5 py-1 rounded-lg">Explain</button>
+                <button @click="immersiveInput='Why is it done this way?';sendImmersive();showImmersiveAnswer=true" class="text-xs text-gray-500 hover:text-purple-400 bg-gray-900 px-2.5 py-1 rounded-lg">Why?</button>
+                <button @click="immersiveInput='How could this be improved?';sendImmersive();showImmersiveAnswer=true" class="text-xs text-gray-500 hover:text-purple-400 bg-gray-900 px-2.5 py-1 rounded-lg">Improve?</button>
+            </div>
+        </div>
+
+        <!-- Mobile immersive answer overlay -->
+        <div x-show="showImmersiveAnswer && immersiveMessages.length > 0" x-transition class="md:hidden immersive-answer-overlay">
+            <div class="answer-header">
+                <h3 class="text-sm font-medium text-gray-300 truncate" x-text="currentFile"></h3>
+                <button @click="showImmersiveAnswer=false" class="text-gray-400 hover:text-white text-lg ml-3 shrink-0">✕</button>
+            </div>
+            <div class="answer-body space-y-3">
+                <template x-for="(msg, i) in immersiveMessages" :key="'mo'+i">
+                    <div :class="msg.role==='user' ? 'bg-purple-900/30 border-purple-800' : 'bg-gray-900 border-gray-800'" class="border rounded-lg px-3 py-2 text-sm">
+                        <div x-show="msg.role==='user'" class="text-white text-xs font-medium" x-text="msg.text"></div>
+                        <div x-show="msg.role==='assistant'" class="prose prose-invert prose-sm max-w-none" x-html="renderMd(msg.text)"></div>
+                        <div x-show="msg.role==='loading'" class="flex items-center gap-2 text-gray-400 text-xs"><span class="spinner"></span> Thinking...</div>
+                    </div>
+                </template>
+            </div>
+            <div class="shrink-0 border-t border-gray-800 p-3">
+                <div class="flex gap-2">
+                    <input x-model="immersiveInput" type="text" placeholder="Ask a follow-up..."
+                        @keydown.enter="sendImmersive()"
+                        class="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500">
+                    <button @click="sendImmersive()" class="bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded-lg text-sm">Ask</button>
+                </div>
+            </div>
+        </div>
+
         <!-- RIGHT: Generate panel (desktop) -->
         <div class="w-72 border-l border-gray-800 flex flex-col shrink-0 bg-gray-950 desktop-only">
             <div class="h-[41px] flex items-center px-3 border-b border-gray-800 text-xs text-gray-500 font-medium uppercase tracking-wider">Generate</div>
@@ -1055,6 +1097,7 @@ function repolm() {
         chatLoading: false,
         selectedText: '',
         immersiveMessages: [],
+        showImmersiveAnswer: false,
         immersiveInput: '',
         generating: false,
         genMessage: '',
