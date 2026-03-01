@@ -434,12 +434,56 @@ def ingest_repo(url: str, progress_callback=None) -> RepoData:
     if progress_callback:
         progress_callback("processing", "Ranking {} files by importance...".format(len(all_files)))
 
+    # Patterns that indicate low-value vendored/generated/boilerplate files
+    LOW_VALUE_DIRS = {
+        "packages", "pkg", "deps", "third_party", "third-party", "thirdparty",
+        "external", "externals", "contrib", "bundled", "copied",
+        "generated", "auto_generated", "autogen", "__generated__",
+        "proto", "protos", "protobuf", "pb", "grpc",
+        "typings", "types", "@types", "stubs",
+        "compat", "compatibility", "backports", "polyfills",
+        "internal", "scripts", "tools", "hack", "misc", "util", "utils",
+    }
+    LOW_VALUE_EXTENSIONS = {
+        ".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf",
+        ".xml", ".plist", ".properties",
+        ".css", ".scss", ".less", ".sass",
+        ".html", ".htm", ".ejs", ".hbs", ".mustache",
+        ".txt", ".rst", ".log",
+        ".sh", ".bash", ".bat", ".cmd", ".ps1",
+        ".d.ts",  # TypeScript type definitions
+    }
+
+    def _is_low_value(rel_path):
+        """Check if file is likely vendored, generated, or low-signal."""
+        parts = rel_path.split("/")
+        # Deep nesting (4+ dirs) = likely internal package structure
+        if len(parts) >= 5:
+            return True
+        # Any path component is a known low-value dir
+        for p in parts[:-1]:
+            if p.lower() in LOW_VALUE_DIRS:
+                return True
+        # Low-value extension
+        ext = os.path.splitext(rel_path)[1].lower()
+        if ext in LOW_VALUE_EXTENSIONS:
+            return True
+        # Generated file patterns
+        basename = os.path.basename(rel_path).lower()
+        if any(basename.endswith(s) for s in (".generated.go", ".pb.go", "_pb2.py", ".g.dart", ".freezed.dart")):
+            return True
+        if basename in ("__init__.py", "conftest.py"):
+            # __init__.py is usually empty or re-exports
+            return True
+        return False
+
     # Score each file: lower score = included first
     def file_sort_key(item):
         rel_path, fpath, size, is_priority, is_entry, is_test_file = item
         imp_score = import_scores.get(rel_path, 0.0)
+        low_value = _is_low_value(rel_path)
 
-        # Priority: 0 = highest priority, 5 = lowest
+        # Priority: 0 = highest priority, 6 = lowest
         if is_priority:
             tier = 0
         elif is_entry:
@@ -447,11 +491,15 @@ def ingest_repo(url: str, progress_callback=None) -> RepoData:
         elif imp_score > 0.5:
             tier = 2  # highly imported
         elif is_test_file:
-            tier = 4  # tests last
+            tier = 5  # tests near last
+        elif low_value:
+            tier = 4.5  # vendored/config/deep-nested
         elif imp_score > 0.1:
             tier = 2.5
         else:
-            tier = 3
+            # Core source files — prefer shallow (closer to root = more important)
+            depth = rel_path.count("/")
+            tier = 3 + min(depth * 0.1, 0.9)  # 3.0-3.9 based on depth
 
         # Within tier, prefer smaller files (more diverse coverage)
         return (tier, -imp_score, size)
