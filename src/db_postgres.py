@@ -266,6 +266,23 @@ async def _create_tables():
         )
         """)
 
+        await conn.execute("""
+        CREATE TABLE IF NOT EXISTS repo_cache (
+            repo_id TEXT PRIMARY KEY,
+            url TEXT,
+            status TEXT NOT NULL DEFAULT 'ready',
+            message TEXT DEFAULT '',
+            data_json TEXT,
+            files_json BYTEA,
+            repo_text BYTEA,
+            created_at DOUBLE PRECISION DEFAULT EXTRACT(EPOCH FROM NOW()),
+            accessed_at DOUBLE PRECISION DEFAULT EXTRACT(EPOCH FROM NOW())
+        )
+        """)
+
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_rc_url ON repo_cache(url)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_rc_accessed ON repo_cache(accessed_at)")
+
     logger.info("PostgreSQL tables created/verified")
 
 
@@ -930,3 +947,68 @@ async def get_admin_stats() -> dict:
         "generation_by_type": [{"kind": r["kind"], "count": r["cnt"]} for r in gen_by_type],
         "top_repos": [{"name": r["name"], "url": r["url"], "count": r["cnt"]} for r in top_repos],
     }
+
+
+# ── Repo Cache (persistent, survives deploys) ──
+
+async def cache_repo(repo_id: str, repo_data: dict):
+    """Store repo in Postgres with compressed files and text."""
+    pool = _get_pool()
+    try:
+        data_json = json.dumps(repo_data.get("data", {}))
+        files_blob = zlib.compress(json.dumps(repo_data.get("files", [])).encode())
+        text_blob = zlib.compress((repo_data.get("text", "") or "").encode())
+        url = repo_data.get("data", {}).get("url", "") or ""
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """INSERT INTO repo_cache (repo_id, url, status, message, data_json, files_json, repo_text, created_at, accessed_at)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+                   ON CONFLICT (repo_id) DO UPDATE SET
+                     url=EXCLUDED.url, status=EXCLUDED.status, message=EXCLUDED.message,
+                     data_json=EXCLUDED.data_json, files_json=EXCLUDED.files_json,
+                     repo_text=EXCLUDED.repo_text, accessed_at=EXCLUDED.accessed_at""",
+                repo_id, url, repo_data.get("status", "ready"),
+                repo_data.get("message", ""), data_json, files_blob, text_blob, time.time()
+            )
+    except Exception:
+        logger.exception("Failed to cache repo %s to Postgres", repo_id)
+
+
+async def load_repo(repo_id: str) -> Optional[dict]:
+    """Load repo from Postgres cache."""
+    pool = _get_pool()
+    try:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow("SELECT * FROM repo_cache WHERE repo_id=$1", repo_id)
+            if not row:
+                return None
+            await conn.execute(
+                "UPDATE repo_cache SET accessed_at=$1 WHERE repo_id=$2", time.time(), repo_id
+            )
+            return {
+                "status": row["status"],
+                "message": row["message"],
+                "data": json.loads(row["data_json"]) if row["data_json"] else {},
+                "files": json.loads(zlib.decompress(bytes(row["files_json"])).decode()) if row["files_json"] else [],
+                "text": zlib.decompress(bytes(row["repo_text"])).decode() if row["repo_text"] else "",
+            }
+    except Exception:
+        logger.exception("Failed to load repo %s from Postgres", repo_id)
+        return None
+
+
+async def find_cached_repo_by_url(url: str) -> Optional[str]:
+    """Find a recently cached repo_id by URL."""
+    pool = _get_pool()
+    try:
+        normalized = url.strip().lower().rstrip("/").replace(".git", "")
+        cutoff = time.time() - 7200  # 2 hours
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT repo_id FROM repo_cache WHERE lower(url) LIKE $1 AND accessed_at > $2 ORDER BY accessed_at DESC LIMIT 1",
+                "%" + normalized + "%", cutoff
+            )
+            return row["repo_id"] if row else None
+    except Exception:
+        logger.exception("Failed to find cached repo by URL")
+        return None

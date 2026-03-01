@@ -368,17 +368,41 @@ async def get_repo_with_fallback(repo_id: str) -> Optional[dict]:
     except Exception:
         pass
 
-    # 3. SQLite cold storage (sync, needs executor)
+    # 3. Postgres repo_cache (native async, survives deploys)
+    if _USE_POSTGRES:
+        try:
+            pg_repo = await _pg.load_repo(repo_id)
+            if pg_repo and pg_repo.get("status") == "ready":
+                _state.repos.set(repo_id, pg_repo)
+                return pg_repo
+        except Exception:
+            pass
+
+    # 4. SQLite cold storage (sync fallback for local dev)
     result = await _run(_state.get_repo_with_fallback, repo_id)
     return result
 
 
 async def find_cached_repo_by_url(url: str) -> Optional[str]:
+    if _USE_POSTGRES:
+        try:
+            result = await _pg.find_cached_repo_by_url(url)
+            if result:
+                return result
+        except Exception:
+            pass
     return await _run(_state.find_cached_repo_by_url, url)
 
 
 async def cache_repo_to_db(repo_id: str, repo_data: dict):
-    return await _run(_state.cache_repo_to_db, repo_id, repo_data)
+    # Always write to SQLite for local dev fallback
+    await _run(_state.cache_repo_to_db, repo_id, repo_data)
+    # Also write to Postgres if available (persistent across deploys)
+    if _USE_POSTGRES:
+        try:
+            await _pg.cache_repo(repo_id, repo_data)
+        except Exception:
+            logger.exception("Failed to cache repo %s to Postgres", repo_id)
 
 
 # ── Auth (signup/login) ──
