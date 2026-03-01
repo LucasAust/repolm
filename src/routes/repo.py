@@ -25,6 +25,40 @@ router = APIRouter()
 logger = logging.getLogger("repolm")
 
 
+def _reconstruct_files_from_text(repo_text, file_index):
+    """Reconstruct file list from repo_text (## path\\n```ext\\ncontent\\n```)."""
+    import re
+    files = []
+    # Parse sections like: ## path/to/file.py\n```py\ncontent\n```
+    sections = re.split(r'\n## ', repo_text)
+    index_map = {f["path"]: f for f in (file_index or [])}
+    for section in sections:
+        section = section.strip()
+        if not section:
+            continue
+        lines = section.split('\n', 1)
+        path = lines[0].strip()
+        if not path or path.startswith('#'):
+            continue
+        content = ""
+        if len(lines) > 1:
+            body = lines[1]
+            # Extract content from code fence
+            match = re.search(r'```\w*\n(.*?)```', body, re.DOTALL)
+            if match:
+                content = match.group(1)
+            else:
+                content = body.strip()
+        idx = index_map.get(path, {})
+        files.append({
+            "path": path,
+            "content": content,
+            "size": idx.get("size", len(content)),
+            "is_priority": idx.get("is_priority", path in ("README.md", "main.py", "index.js")),
+        })
+    return files
+
+
 async def find_cached_repo_any(url: str):
     """Find a cached repo by URL — no TTL limit, works for all URL types."""
     import sqlite3
@@ -352,7 +386,9 @@ async def save_repo_to_account(repo_id: str, request: Request):
         file_count=data["file_count"], total_chars=data["total_chars"],
         languages=data["languages"], repo_text=repo["text"], file_index=file_index
     )
-    return {"db_id": db_id}
+    # Also ensure cold cache has the full files for reload
+    state.cache_repo_to_db(repo_id, repo)
+    return {"db_id": db_id, "cache_repo_id": repo_id}
 
 
 @router.get("/api/my/repos/{db_id}")
@@ -366,12 +402,18 @@ async def get_saved_repo(db_id: int, request: Request):
     # Try to restore full files from cold cache
     files = []
     url = saved.get("url", "")
+
+    # Method 1: find by URL in cold cache
     if url:
         cached_id = await find_cached_repo_any(url)
         if cached_id:
             cached = await db_async.get_repo_with_fallback(cached_id)
             if cached and cached.get("files"):
                 files = cached["files"]
+
+    # Method 2: reconstruct files from repo_text (always available)
+    if not files and saved.get("repo_text"):
+        files = _reconstruct_files_from_text(saved["repo_text"], saved.get("file_index", []))
 
     repo_id = str(uuid.uuid4())[:8]
     repo_entry = {
