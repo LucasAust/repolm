@@ -161,3 +161,118 @@ async def api_usage(request: Request):
     if err:
         return err
     return await db_async.get_api_usage_stats(user["id"])
+
+
+# ── Synchronous (blocking) endpoints ────────────────────────────────────────
+# These wait until the job is done and return the result in one request.
+
+import asyncio
+
+
+async def _poll_repo_ready(repo_id: str, timeout: float = 120) -> dict:
+    """Poll until repo is ready or error. Returns repo dict."""
+    deadline = asyncio.get_event_loop().time() + timeout
+    while asyncio.get_event_loop().time() < deadline:
+        repo = await db_async.get_repo_with_fallback(repo_id)
+        if repo and repo.get("status") in ("ready", "error"):
+            return repo
+        await asyncio.sleep(1.5)
+    return {"status": "timeout", "message": "Ingestion timed out"}
+
+
+async def _poll_job_done(job_id: str, timeout: float = 180) -> dict:
+    """Poll until job is done or error. Returns job dict."""
+    deadline = asyncio.get_event_loop().time() + timeout
+    while asyncio.get_event_loop().time() < deadline:
+        job = await db_async.get_job(job_id)
+        if not job:
+            job = state.jobs.get(job_id)
+        if job and job.get("status") in ("done", "error"):
+            return job
+        await asyncio.sleep(1.5)
+    return {"status": "timeout", "message": "Generation timed out", "result": None}
+
+
+@router.post("/analyze")
+async def api_analyze(request: Request):
+    """One-shot endpoint: ingest a repo + generate content, return the result.
+    Blocks until complete. Timeout ~5 min.
+
+    Request body:
+    {
+        "url": "https://github.com/owner/repo",
+        "kind": "overview",          // optional, default "overview"
+        "depth": "high-level",       // optional
+        "expertise": "amateur"       // optional
+    }
+
+    Returns the generated content directly.
+    """
+    user, err = await _get_api_user(request)
+    if err:
+        return err
+
+    body = await request.json()
+    url = body.get("url", "").strip()
+    if not url:
+        return JSONResponse({"error": "url required"}, 400)
+    if not url.startswith("http"):
+        url = "https://github.com/" + url
+
+    kind = body.get("kind", "overview")
+    depth = body.get("depth", "high-level")
+    expertise = body.get("expertise", "amateur")
+
+    # Check total cost upfront
+    ingest_cost = TOKEN_COSTS["ingest"]
+    gen_cost = TOKEN_COSTS.get(kind, 10)
+    total_cost = ingest_cost + gen_cost
+    balance = await db_async.get_token_balance(user["id"])
+    if balance < total_cost:
+        return JSONResponse({
+            "error": "insufficient_tokens",
+            "required": total_cost,
+            "balance": balance,
+            "breakdown": {"ingest": ingest_cost, "generate": gen_cost}
+        }, 402)
+
+    # Step 1: Ingest
+    await db_async.spend_tokens(user["id"], ingest_cost, "API: Ingest repo")
+    repo_id = str(uuid.uuid4())[:8]
+    state.repos.set(repo_id, {"status": "queued", "message": "Starting...", "files": [], "text": "", "data": {}})
+    status, _ = ingest_queue.submit(repo_id, run_ingest, repo_id, url)
+    if status == "rejected":
+        return JSONResponse({"error": "Server busy, try again in a moment"}, 503)
+
+    repo = await _poll_repo_ready(repo_id, timeout=120)
+    if repo.get("status") != "ready":
+        return JSONResponse({
+            "error": "ingestion_failed",
+            "message": repo.get("message", "Ingestion failed or timed out")
+        }, 500)
+
+    # Step 2: Generate
+    await db_async.spend_tokens(user["id"], gen_cost, f"API: Generate {kind}")
+    from routes.generate import run_generate
+    job_id = str(uuid.uuid4())[:8]
+    await db_async.create_job(job_id, kind="generate", repo_id=repo_id)
+    status, _ = generate_queue.submit(job_id, run_generate, job_id, repo_id, kind, depth, expertise)
+    if status == "rejected":
+        return JSONResponse({"error": "Server busy, try again in a moment"}, 503)
+
+    job = await _poll_job_done(job_id, timeout=180)
+    if job.get("status") != "done":
+        return JSONResponse({
+            "error": "generation_failed",
+            "message": job.get("message", "Generation failed or timed out")
+        }, 500)
+
+    analytics.track("api_analyze", user_id=user["id"], data={"url": url, "kind": kind})
+    return {
+        "url": url,
+        "kind": kind,
+        "depth": depth,
+        "expertise": expertise,
+        "content": job.get("result", ""),
+        "token_cost": total_cost,
+    }

@@ -77,15 +77,18 @@ details[open] summary{margin-bottom:.5rem}
   <div class="section-label">Getting Started</div>
   <a href="#overview">Overview</a>
   <a href="#authentication">Authentication</a>
-  <a href="#workflow">Workflow</a>
   <a href="#quickstart">Quick Start</a>
 
   <div class="section-label">Endpoints</div>
+  <a href="#post-analyze">POST /analyze</a>
+  <a href="#get-usage">GET /usage</a>
+
+  <div class="section-label">Advanced</div>
+  <a href="#async-workflow">Async Workflow</a>
   <a href="#post-repos">POST /repos</a>
   <a href="#get-repos">GET /repos/{id}</a>
   <a href="#post-generate">POST /repos/{id}/generate</a>
   <a href="#get-jobs">GET /jobs/{id}</a>
-  <a href="#get-usage">GET /usage</a>
 
   <div class="section-label">Reference</div>
   <a href="#rate-limits">Rate Limits</a>
@@ -122,176 +125,115 @@ details[open] summary{margin-bottom:.5rem}
   <p style="color:var(--text-muted);font-size:.8rem">⚠️ Keep your API key secret. Do not expose it in client-side code or public repositories.</p>
 </section>
 
-<!-- Workflow -->
-<section id="workflow" style="margin-bottom:3rem">
-  <h2 style="font-size:1.4rem;font-weight:600;margin-bottom:1rem">How It Works</h2>
-  <p style="color:var(--text-secondary);font-size:.9rem;margin-bottom:1.25rem">
-    Every generation follows a 5-step async workflow:
-  </p>
-
-  <div class="step">
-    <div class="step-num">1</div>
-    <div class="step-content">
-      <strong>Get your API key</strong>
-      <p style="color:var(--text-secondary);font-size:.85rem">Go to your account settings and generate an API key.</p>
-    </div>
-  </div>
-  <div class="step">
-    <div class="step-num">2</div>
-    <div class="step-content">
-      <strong>Ingest a repo</strong>
-      <p style="color:var(--text-secondary);font-size:.85rem"><span class="badge badge-post">POST</span> <code style="font-size:.85rem">/repos</code> — Submit a GitHub URL. Returns a <code style="font-size:.85rem">repo_id</code>.</p>
-    </div>
-  </div>
-  <div class="step">
-    <div class="step-num">3</div>
-    <div class="step-content">
-      <strong>Poll until ready</strong>
-      <p style="color:var(--text-secondary);font-size:.85rem"><span class="badge badge-get">GET</span> <code style="font-size:.85rem">/repos/{repo_id}</code> — Poll until <code style="font-size:.85rem">status</code> is <code style="font-size:.85rem">"ready"</code>.</p>
-    </div>
-  </div>
-  <div class="step">
-    <div class="step-num">4</div>
-    <div class="step-content">
-      <strong>Generate content</strong>
-      <p style="color:var(--text-secondary);font-size:.85rem"><span class="badge badge-post">POST</span> <code style="font-size:.85rem">/repos/{repo_id}/generate</code> — Choose kind, depth, and expertise. Returns a <code style="font-size:.85rem">job_id</code>.</p>
-    </div>
-  </div>
-  <div class="step">
-    <div class="step-num">5</div>
-    <div class="step-content">
-      <strong>Poll until done</strong>
-      <p style="color:var(--text-secondary);font-size:.85rem"><span class="badge badge-get">GET</span> <code style="font-size:.85rem">/jobs/{job_id}</code> — Poll until <code style="font-size:.85rem">status</code> is <code style="font-size:.85rem">"done"</code>. The <code style="font-size:.85rem">result</code> field contains your generated content.</p>
-    </div>
-  </div>
-</section>
-
 <!-- Quick Start -->
 <section id="quickstart" style="margin-bottom:3rem">
   <h2 style="font-size:1.4rem;font-weight:600;margin-bottom:.75rem">Quick Start</h2>
   <p style="color:var(--text-secondary);font-size:.9rem;margin-bottom:1rem">
-    Copy-paste one of these examples to go from zero to generated content:
+    One request. One response. That's it.
   </p>
 
   <div class="tab-group">
-    <button class="tab-btn active" onclick="switchTab(event,'qs-bash')">Bash</button>
+    <button class="tab-btn active" onclick="switchTab(event,'qs-bash')">curl</button>
     <button class="tab-btn" onclick="switchTab(event,'qs-python')">Python</button>
   </div>
 
   <div id="qs-bash" class="tab-panel active">
     <div class="code-block" style="border-top:none;border-radius:0 0 8px 8px">
-      <div class="code-header"><span>end-to-end.sh — requires curl &amp; jq</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-      <pre>#!/usr/bin/env bash
-set -euo pipefail
-
-API_KEY="rlm_sk_YOUR_KEY_HERE"
-BASE="https://repolm.com/api/v1"
-REPO_URL="https://github.com/fastapi/fastapi"
-
-# Step 1 — Ingest the repo
-echo "⏳ Ingesting repo..."
-INGEST=$(curl -s -X POST "$BASE/repos" \
-  -H "X-API-Key: $API_KEY" \
+      <div class="code-header"><span>Analyze a repo in one request</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre>curl -X POST https://repolm.com/api/v1/analyze \
+  -H "X-API-Key: YOUR_API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"url\": \"$REPO_URL\"}")
-REPO_ID=$(echo "$INGEST" | jq -r '.repo_id')
-echo "   repo_id: $REPO_ID (cost: $(echo "$INGEST" | jq '.token_cost') tokens)"
-
-# Step 2 — Poll until ingestion is ready
-echo "⏳ Waiting for ingestion..."
-while true; do
-  STATUS=$(curl -s "$BASE/repos/$REPO_ID" \
-    -H "X-API-Key: $API_KEY" | jq -r '.status')
-  echo "   status: $STATUS"
-  [ "$STATUS" = "ready" ] &amp;&amp; break
-  [ "$STATUS" = "error" ] &amp;&amp; echo "❌ Ingestion failed" &amp;&amp; exit 1
-  sleep 3
-done
-
-# Step 3 — Generate an overview
-echo "⏳ Generating overview..."
-GEN=$(curl -s -X POST "$BASE/repos/$REPO_ID/generate" \
-  -H "X-API-Key: $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"kind": "overview", "depth": "high-level", "expertise": "intermediate"}')
-JOB_ID=$(echo "$GEN" | jq -r '.job_id')
-echo "   job_id: $JOB_ID (cost: $(echo "$GEN" | jq '.token_cost') tokens)"
-
-# Step 4 — Poll until generation is done
-echo "⏳ Waiting for generation..."
-while true; do
-  JOB=$(curl -s "$BASE/jobs/$JOB_ID" -H "X-API-Key: $API_KEY")
-  JOB_STATUS=$(echo "$JOB" | jq -r '.status')
-  echo "   status: $JOB_STATUS"
-  [ "$JOB_STATUS" = "done" ] &amp;&amp; break
-  [ "$JOB_STATUS" = "error" ] &amp;&amp; echo "❌ Generation failed" &amp;&amp; exit 1
-  sleep 5
-done
-
-# Step 5 — Print result
-echo ""
-echo "✅ Done! Result:"
-echo "$JOB" | jq '.result'</pre>
+  -d '{"url": "https://github.com/fastapi/fastapi"}'</pre>
     </div>
   </div>
 
   <div id="qs-python" class="tab-panel">
     <div class="code-block" style="border-top:none;border-radius:0 0 8px 8px">
-      <div class="code-header"><span>repolm_example.py — requires: pip install requests</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-      <pre>import time
-import requests
+      <div class="code-header"><span>pip install requests</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre>import requests
 
-API_KEY = "rlm_sk_YOUR_KEY_HERE"
-BASE = "https://repolm.com/api/v1"
-HEADERS = {"X-API-Key": API_KEY, "Content-Type": "application/json"}
+resp = requests.post("https://repolm.com/api/v1/analyze",
+    headers={"X-API-Key": "YOUR_API_KEY"},
+    json={
+        "url": "https://github.com/fastapi/fastapi",
+        "kind": "overview",
+        "depth": "high-level",
+        "expertise": "intermediate"
+    })
 
-# Step 1 — Ingest
-print("⏳ Ingesting repo...")
-resp = requests.post(f"{BASE}/repos", headers=HEADERS, json={
-    "url": "https://github.com/fastapi/fastapi"
-})
-resp.raise_for_status()
-repo_id = resp.json()["repo_id"]
-print(f"   repo_id: {repo_id}")
-
-# Step 2 — Poll ingestion
-print("⏳ Waiting for ingestion...")
-while True:
-    status = requests.get(f"{BASE}/repos/{repo_id}", headers=HEADERS).json()
-    print(f"   status: {status['status']}")
-    if status["status"] == "ready":
-        break
-    if status["status"] == "error":
-        raise RuntimeError("Ingestion failed")
-    time.sleep(3)
-
-# Step 3 — Generate
-print("⏳ Generating overview...")
-resp = requests.post(f"{BASE}/repos/{repo_id}/generate", headers=HEADERS, json={
-    "kind": "overview",
-    "depth": "high-level",
-    "expertise": "intermediate",
-})
-resp.raise_for_status()
-job_id = resp.json()["job_id"]
-print(f"   job_id: {job_id}")
-
-# Step 4 — Poll generation
-print("⏳ Waiting for generation...")
-while True:
-    job = requests.get(f"{BASE}/jobs/{job_id}", headers=HEADERS).json()
-    print(f"   status: {job['status']}")
-    if job["status"] == "done":
-        break
-    if job["status"] == "error":
-        raise RuntimeError("Generation failed")
-    time.sleep(5)
-
-# Step 5 — Result
-print("\n✅ Done!")
-print(job["result"])</pre>
+print(resp.json()["content"])</pre>
     </div>
   </div>
+
+  <p style="color:var(--text-muted);font-size:.85rem;margin-top:.75rem">
+    &#9202; The request blocks until the result is ready (typically 30&#8211;90 seconds). No polling needed.
+  </p>
+</section>
+
+<!-- POST /analyze -->
+<section style="margin-bottom:3rem">
+  <h2 style="font-size:1.4rem;font-weight:600;margin-bottom:1rem">Endpoints</h2>
+
+  <div class="endpoint-card" id="post-analyze">
+    <div style="margin-bottom:.75rem">
+      <span class="badge badge-post">POST</span>
+      <span class="endpoint-path">/analyze</span>
+      <span style="font-size:.75rem;color:var(--green-accent);margin-left:.5rem;font-weight:600">RECOMMENDED</span>
+    </div>
+    <p style="color:var(--text-secondary);font-size:.9rem;margin-bottom:1rem">
+      Analyze a GitHub repo and get the result in a single request. Handles ingestion + generation automatically. Blocks until complete.
+    </p>
+
+    <strong style="font-size:.8rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em">Request Body</strong>
+    <div class="code-block">
+      <div class="code-header"><span>JSON</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre>{
+  "url": "https://github.com/fastapi/fastapi",
+  "kind": "overview",
+  "depth": "high-level",
+  "expertise": "intermediate"
+}</pre>
+    </div>
+
+    <table class="error-table" style="margin-bottom:1rem">
+      <tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr>
+      <tr><td><code>url</code></td><td>string</td><td>&#8212;</td><td><strong>Required.</strong> GitHub repo URL or <code>owner/repo</code></td></tr>
+      <tr><td><code>kind</code></td><td>string</td><td><code>"overview"</code></td><td><code>overview</code>, <code>podcast</code>, or <code>slides</code></td></tr>
+      <tr><td><code>depth</code></td><td>string</td><td><code>"high-level"</code></td><td><code>high-level</code> or <code>in-depth</code></td></tr>
+      <tr><td><code>expertise</code></td><td>string</td><td><code>"amateur"</code></td><td><code>amateur</code>, <code>intermediate</code>, or <code>expert</code></td></tr>
+    </table>
+
+    <strong style="font-size:.8rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em">Response</strong>
+    <div class="code-block">
+      <div class="code-header"><span>200 OK</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre>{
+  "url": "https://github.com/fastapi/fastapi",
+  "kind": "overview",
+  "depth": "high-level",
+  "expertise": "intermediate",
+  "content": "# FastAPI Overview\n\nFastAPI is a modern, high-performance...",
+  "token_cost": 4
+}</pre>
+    </div>
+
+    <details>
+      <summary>Token costs by kind</summary>
+      <table class="error-table">
+        <tr><td><code>overview</code></td><td>4 tokens (1 ingest + 3 generate)</td></tr>
+        <tr><td><code>slides</code></td><td>6 tokens (1 ingest + 5 generate)</td></tr>
+        <tr><td><code>podcast</code></td><td>9 tokens (1 ingest + 8 generate)</td></tr>
+      </table>
+    </details>
+  </div>
+</section>
+
+<!-- Advanced Async Workflow -->
+<section id="async-workflow" style="margin-bottom:2rem">
+  <h2 style="font-size:1.4rem;font-weight:600;margin-bottom:.75rem">Advanced: Async Workflow</h2>
+  <p style="color:var(--text-secondary);font-size:.9rem;margin-bottom:.75rem">
+    For more control (webhooks, progress tracking, reusing ingested repos), use the individual endpoints below.
+    The flow is: ingest &#8594; poll &#8594; generate &#8594; poll &#8594; result.
+  </p>
 </section>
 
 <!-- Endpoints -->
