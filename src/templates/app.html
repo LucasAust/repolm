@@ -988,6 +988,9 @@
             <button @click="mobileDrawer=null;mode='chat'" :class="mode==='chat'&&!mobileDrawer?'active':''">
                 <span class="tab-icon">💬</span><span>Chat</span>
             </button>
+            <button x-show="currentFile" @click="mobileDrawer=null;mode='immersive'" :class="mode==='immersive'&&!mobileDrawer?'active':''">
+                <span class="tab-icon">🔍</span><span>Deep Dive</span>
+            </button>
             <button @click="mobileDrawer=null;mode='viewer'" :class="mode==='viewer'&&!mobileDrawer?'active':''">
                 <span class="tab-icon">📄</span><span>Viewer</span>
             </button>
