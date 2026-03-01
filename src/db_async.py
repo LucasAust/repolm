@@ -543,6 +543,49 @@ async def cleanup_rate_limits():
     else:
         return await _run(_sync.cleanup_rate_limits)
 
+
+# ── Signup Rate Limiting ──
+
+async def check_signup_rate_limit(ip_address: str, max_signups: int = 3, window_seconds: int = 3600) -> bool:
+    """Returns True if ALLOWED."""
+    if _USE_POSTGRES:
+        return await _pg.check_signup_rate_limit(ip_address, max_signups, window_seconds)
+    return await _run(_sync.check_signup_rate_limit, ip_address, max_signups, window_seconds)
+
+
+async def record_signup_attempt(ip_address: str):
+    if _USE_POSTGRES:
+        return await _pg.record_signup_attempt(ip_address)
+    return await _run(_sync.record_signup_attempt, ip_address)
+
+
+async def cleanup_signup_rate_limits():
+    if _USE_POSTGRES:
+        return await _pg.cleanup_signup_rate_limits()
+    return await _run(_sync.cleanup_signup_rate_limits)
+
+
+# ── Email Verification ──
+
+async def set_verification_token(user_id: int, token: str):
+    if _USE_POSTGRES:
+        return await _pg.set_verification_token(user_id, token)
+    return await _run(_sync.set_verification_token, user_id, token)
+
+
+async def verify_email_by_token(token: str) -> Optional[dict]:
+    if _USE_POSTGRES:
+        return await _pg.verify_email_by_token(token)
+    return await _run(_sync.verify_email_by_token, token)
+
+
+# ── Session Cleanup ──
+
+async def cleanup_expired_sessions():
+    if _USE_POSTGRES:
+        return await _pg.cleanup_expired_sessions()
+    return await _run(_sync.cleanup_expired_sessions)
+
 # ── Health ──
 
 async def db_health_check() -> bool:

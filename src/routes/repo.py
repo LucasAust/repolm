@@ -64,8 +64,10 @@ async def find_cached_repo_any(url):
     return await db_async.find_cached_repo_by_url(url)
 
 
-def run_ingest(repo_id, url):
+def run_ingest(repo_id, url, webhook_url=None, api_key=None):
     """Background worker: clone and process a repo. Runs in thread pool (sync is fine)."""
+    from webhook import fire_webhook, build_completed_payload, build_failed_payload
+
     try:
         def _progress(status, message):
             try:
@@ -91,9 +93,13 @@ def run_ingest(repo_id, url):
         db_async.sync_cache_repo_to_db(repo_id, repo_entry)
         db_async.sync_update_job(repo_id, status="ready", message="Ready",
                            result=json.dumps(repo_data))
+        if webhook_url and api_key:
+            fire_webhook(webhook_url, build_completed_payload(repo_id, json.dumps(repo_data)), api_key)
     except Exception as e:
         logger.exception("Ingest failed for %s", url)
         db_async.sync_update_job(repo_id, status="error", message=str(e))
+        if webhook_url and api_key:
+            fire_webhook(webhook_url, build_failed_payload(repo_id, str(e)), api_key)
 
 
 def run_upload_ingest(repo_id, files_data):

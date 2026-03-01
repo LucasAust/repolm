@@ -27,11 +27,15 @@ router = APIRouter()
 logger = logging.getLogger("repolm")
 
 
-def run_generate(job_id, repo_id, kind, depth, expertise):
+def run_generate(job_id, repo_id, kind, depth, expertise, webhook_url=None, api_key=None):
     """Background worker: generate content. Runs in thread pool (sync is fine)."""
+    from webhook import fire_webhook, build_completed_payload, build_failed_payload
+
     repo = db_async.sync_get_repo_with_fallback(repo_id)
     if not repo or repo["status"] != "ready":
         db_async.sync_update_job(job_id, status="error", message="Repo not ready")
+        if webhook_url and api_key:
+            fire_webhook(webhook_url, build_failed_payload(job_id, "Repo not ready"), api_key)
         return
     try:
         text = repo["text"]
@@ -39,7 +43,10 @@ def run_generate(job_id, repo_id, kind, depth, expertise):
             text = text[:200_000] + "\n\n[... truncated ...]"
         templates = {"overview": OVERVIEW_SYSTEM, "podcast": PODCAST_SYSTEM, "slides": SLIDES_SYSTEM}
         if kind not in templates:
-            db_async.sync_update_job(job_id, status="error", message="Unknown kind: {}".format(kind))
+            msg = "Unknown kind: {}".format(kind)
+            db_async.sync_update_job(job_id, status="error", message=msg)
+            if webhook_url and api_key:
+                fire_webhook(webhook_url, build_failed_payload(job_id, msg), api_key)
             return
         system = get_system_prompt(templates[kind], depth, expertise)
         prompts = {
@@ -50,9 +57,13 @@ def run_generate(job_id, repo_id, kind, depth, expertise):
         db_async.sync_update_job(job_id, status="generating", message="Generating {}...".format(kind))
         result = call_llm(system, prompts[kind])
         db_async.sync_update_job(job_id, status="done", message="Done", result=result)
+        if webhook_url and api_key:
+            fire_webhook(webhook_url, build_completed_payload(job_id, result), api_key)
     except Exception as e:
         logger.exception("Generate failed for job %s", job_id)
         db_async.sync_update_job(job_id, status="error", message=str(e))
+        if webhook_url and api_key:
+            fire_webhook(webhook_url, build_failed_payload(job_id, str(e)), api_key)
 
 
 @router.post("/api/repo/{repo_id}/generate")

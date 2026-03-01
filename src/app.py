@@ -58,7 +58,10 @@ async def lifespan(app: FastAPI):
 
     # Store main event loop for sync bridges in background threads
     import db_async
-    db_async.set_main_loop(asyncio.get_running_loop())
+    import webhook
+    loop = asyncio.get_running_loop()
+    db_async.set_main_loop(loop)
+    webhook.set_main_loop(loop)
 
     # Initialize PostgreSQL pool if DATABASE_URL is set
     if os.environ.get("DATABASE_URL"):

@@ -1,17 +1,22 @@
 """
 RepoLM — Email/Password Auth
 Simple signup + login with bcrypt password hashing.
+Rate limiting, email verification, CAPTCHA, session expiry.
 """
 
 import os
 import hashlib
 import hmac
+import logging
 import secrets
 from typing import Optional
 
+import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 import db_async
+
+logger = logging.getLogger("repolm")
 
 router = APIRouter()
 SESSION_COOKIE = "repolm_session"
@@ -25,6 +30,30 @@ def _cookie_kwargs(request: Request = None) -> dict:
         if forwarded == "https" or request.url.scheme == "https":
             secure = True
     return {"max_age": 30 * 86400, "httponly": True, "samesite": "lax", "secure": secure}
+
+
+def _get_client_ip(request: Request) -> str:
+    """Extract client IP, respecting X-Forwarded-For."""
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+async def _verify_captcha(token: str) -> bool:
+    """Verify reCAPTCHA v3 token. Returns True if valid (score >= 0.5)."""
+    secret = os.environ.get("RECAPTCHA_SECRET_KEY")
+    if not secret:
+        return True  # Skip in dev/local
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.post("https://www.google.com/recaptcha/api/siteverify",
+                                     data={"secret": secret, "response": token})
+            data = resp.json()
+            return data.get("success", False) and data.get("score", 0) >= 0.5
+    except Exception:
+        logger.warning("CAPTCHA verification failed, allowing request")
+        return True
 
 
 def _hash_password(password: str, salt: str = None) -> tuple:

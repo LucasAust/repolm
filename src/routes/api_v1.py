@@ -5,6 +5,7 @@ Uses thread pools instead of raw threads.
 """
 
 import uuid
+from functools import partial
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
@@ -125,6 +126,9 @@ async def api_ingest_repo(request: Request):
     if not url.startswith("http"):
         url = "https://github.com/" + url
 
+    webhook_url = body.get("webhook_url")
+    api_key = request.headers.get("x-api-key", "")
+
     cost = TOKEN_COSTS["ingest"]
     balance = await db_async.get_token_balance(user["id"])
     if balance < cost:
@@ -134,7 +138,8 @@ async def api_ingest_repo(request: Request):
     repo_id = str(uuid.uuid4())[:8]
     state.repos.set(repo_id, {"status": "queued", "message": "Starting...", "files": [], "text": "", "data": {}})
 
-    status, queue_pos = ingest_queue.submit(repo_id, run_ingest, repo_id, url)
+    _ingest_fn = partial(run_ingest, webhook_url=webhook_url, api_key=api_key)
+    status, queue_pos = ingest_queue.submit(repo_id, _ingest_fn, repo_id, url)
     if status == "rejected":
         return JSONResponse({"error": "Server busy, try again in a moment"}, 503)
 
@@ -172,6 +177,9 @@ async def api_generate(repo_id: str, request: Request):
     depth = body.get("depth", "high-level")
     expertise = body.get("expertise", "amateur")
 
+    webhook_url = body.get("webhook_url")
+    api_key = request.headers.get("x-api-key", "")
+
     repo = await db_async.get_repo_with_fallback(repo_id)
     if not repo or repo["status"] != "ready":
         return JSONResponse({"error": "Repo not ready"}, 400)
@@ -186,7 +194,8 @@ async def api_generate(repo_id: str, request: Request):
     job_id = str(uuid.uuid4())[:8]
     state.jobs.set(job_id, {"status": "queued", "message": "Starting...", "result": None})
 
-    status, queue_pos = generate_queue.submit(job_id, run_generate, job_id, repo_id, kind, depth, expertise)
+    _gen_fn = partial(run_generate, webhook_url=webhook_url, api_key=api_key)
+    status, queue_pos = generate_queue.submit(job_id, _gen_fn, job_id, repo_id, kind, depth, expertise)
     if status == "rejected":
         return JSONResponse({"error": "Server busy, try again in a moment"}, 503)
 

@@ -76,9 +76,29 @@ async def _create_tables():
             referred_by INTEGER,
             api_key TEXT,
             api_calls_today INTEGER DEFAULT 0,
-            api_calls_date TEXT
+            api_calls_date TEXT,
+            email_verified INTEGER DEFAULT 0,
+            verification_token TEXT
         )
         """)
+
+        # Signup rate limiting table
+        await conn.execute("""
+        CREATE TABLE IF NOT EXISTS signup_rate_limits (
+            id SERIAL PRIMARY KEY,
+            ip_address TEXT NOT NULL,
+            created_at DOUBLE PRECISION DEFAULT EXTRACT(EPOCH FROM NOW())
+        )
+        """)
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_signup_rate_ip ON signup_rate_limits(ip_address, created_at)")
+
+        # Migration: add new columns if missing
+        for col, default in [("email_verified", "0"), ("verification_token", "NULL")]:
+            try:
+                typ = "INTEGER DEFAULT " + default if col == "email_verified" else "TEXT"
+                await conn.execute(f"ALTER TABLE users ADD COLUMN {col} {typ}")
+            except Exception:
+                pass  # column already exists
 
         await conn.execute("""
         CREATE TABLE IF NOT EXISTS course_packs (
@@ -1019,3 +1039,56 @@ async def find_cached_repo_by_url(url: str) -> Optional[str]:
     except Exception:
         logger.exception("Failed to find cached repo by URL")
         return None
+
+
+# ── Signup Rate Limiting ──
+
+async def check_signup_rate_limit(ip_address: str, max_signups: int = 3, window_seconds: int = 3600) -> bool:
+    """Returns True if ALLOWED."""
+    cutoff = time.time() - window_seconds
+    pool = _get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT COUNT(*) as cnt FROM signup_rate_limits WHERE ip_address=$1 AND created_at>$2",
+            ip_address, cutoff)
+        return row["cnt"] < max_signups
+
+
+async def record_signup_attempt(ip_address: str):
+    pool = _get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("INSERT INTO signup_rate_limits (ip_address, created_at) VALUES ($1,$2)",
+                           ip_address, time.time())
+
+
+async def cleanup_signup_rate_limits():
+    cutoff = time.time() - 7200
+    pool = _get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("DELETE FROM signup_rate_limits WHERE created_at<$1", cutoff)
+
+
+# ── Email Verification ──
+
+async def set_verification_token(user_id: int, token: str):
+    pool = _get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("UPDATE users SET verification_token=$1, email_verified=0 WHERE id=$2", token, user_id)
+
+
+async def verify_email_by_token(token: str) -> Optional[dict]:
+    pool = _get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT id, username, email FROM users WHERE verification_token=$1", token)
+        if not row:
+            return None
+        await conn.execute("UPDATE users SET email_verified=1, verification_token=NULL WHERE id=$1", row["id"])
+        return _record_to_dict(row)
+
+
+# ── Session Cleanup ──
+
+async def cleanup_expired_sessions():
+    pool = _get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("DELETE FROM sessions WHERE expires_at<$1 AND expires_at IS NOT NULL", time.time())

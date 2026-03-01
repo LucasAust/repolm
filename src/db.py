@@ -179,10 +179,22 @@ def init_db():
             "api_key": "ALTER TABLE users ADD COLUMN api_key TEXT",
             "api_calls_today": "ALTER TABLE users ADD COLUMN api_calls_today INTEGER DEFAULT 0",
             "api_calls_date": "ALTER TABLE users ADD COLUMN api_calls_date TEXT",
+            "email_verified": "ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0",
+            "verification_token": "ALTER TABLE users ADD COLUMN verification_token TEXT",
         }
         for col, sql in extra_migrations.items():
             if col not in cols:
                 conn.execute(sql)
+
+        # Signup rate limiting table
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS signup_rate_limits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ip_address TEXT NOT NULL,
+            created_at REAL DEFAULT (unixepoch())
+        )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_signup_rate_ip ON signup_rate_limits(ip_address, created_at)")
 
         # Job status table (multi-worker safe)
         conn.executescript("""
@@ -892,6 +904,56 @@ def get_admin_stats() -> dict:
         "generation_by_type": [{"kind": r["kind"], "count": r["cnt"]} for r in gen_by_type],
         "top_repos": [{"name": r["name"], "url": r["url"], "count": r["cnt"]} for r in top_repos],
     }
+
+
+# ── Signup Rate Limiting ──
+
+def check_signup_rate_limit(ip_address: str, max_signups: int = 3, window_seconds: int = 3600) -> bool:
+    """Check if IP has exceeded signup rate limit. Returns True if ALLOWED."""
+    cutoff = time.time() - window_seconds
+    with db() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) as cnt FROM signup_rate_limits WHERE ip_address=? AND created_at>?",
+            (ip_address, cutoff)).fetchone()
+        return row["cnt"] < max_signups
+
+
+def record_signup_attempt(ip_address: str):
+    """Record a signup attempt from an IP."""
+    with db() as conn:
+        conn.execute("INSERT INTO signup_rate_limits (ip_address) VALUES (?)", (ip_address,))
+
+
+def cleanup_signup_rate_limits():
+    """Purge old signup rate limit records."""
+    cutoff = time.time() - 7200  # 2 hours
+    with db() as conn:
+        conn.execute("DELETE FROM signup_rate_limits WHERE created_at<?", (cutoff,))
+
+
+# ── Email Verification ──
+
+def set_verification_token(user_id: int, token: str):
+    with db() as conn:
+        conn.execute("UPDATE users SET verification_token=?, email_verified=0 WHERE id=?", (token, user_id))
+
+
+def verify_email_by_token(token: str) -> Optional[dict]:
+    """Verify a user by token. Returns user dict or None."""
+    with db() as conn:
+        row = conn.execute("SELECT id, username, email FROM users WHERE verification_token=?", (token,)).fetchone()
+        if not row:
+            return None
+        conn.execute("UPDATE users SET email_verified=1, verification_token=NULL WHERE id=?", (row["id"],))
+        return dict(row)
+
+
+# ── Session Cleanup ──
+
+def cleanup_expired_sessions():
+    """Purge expired sessions."""
+    with db() as conn:
+        conn.execute("DELETE FROM sessions WHERE expires_at<? AND expires_at IS NOT NULL", (time.time(),))
 
 
 # Init on import
