@@ -599,6 +599,20 @@ async def cleanup_expired_sessions():
         return await _pg.cleanup_expired_sessions()
     return await _run(_sync.cleanup_expired_sessions)
 
+# ── Shares ──
+
+async def save_share(share_id: str, data_json: str):
+    if _USE_POSTGRES:
+        return await _pg.save_share(share_id, data_json)
+    return await _run(_sync.save_share, share_id, data_json)
+
+
+async def get_share(share_id: str):
+    if _USE_POSTGRES:
+        return await _pg.get_share(share_id)
+    return await _run(_sync.get_share, share_id)
+
+
 # ── Health ──
 
 async def db_health_check() -> bool:

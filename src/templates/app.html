@@ -375,6 +375,30 @@ html{overflow:hidden;position:fixed;width:100%;height:100%}
     </div>
 </div>
 
+<!-- Referral Modal -->
+<div x-show="showReferralModal" x-transition class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" @click.self="showReferralModal=false">
+    <div class="bg-gray-950 border border-gray-700 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-bold">👥 Referral</h2>
+            <button @click="showReferralModal=false" class="text-gray-500 hover:text-white">✕</button>
+        </div>
+        <p class="text-xs text-gray-400 mb-4">Share your referral link and earn bonus tokens when friends sign up!</p>
+        <template x-if="referralCode">
+            <div>
+                <label class="text-xs text-gray-500 mb-1 block">Your referral link</label>
+                <div class="flex items-center gap-2 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2">
+                    <code class="text-sm text-green-400 flex-1 truncate" x-text="'https://repolm.com/ref/' + referralCode"></code>
+                    <button @click="navigator.clipboard.writeText('https://repolm.com/ref/' + referralCode); referralCopied=true; setTimeout(()=>referralCopied=false, 1500)" class="text-xs text-gray-400 hover:text-white" x-text="referralCopied ? '✅' : '📋'"></button>
+                </div>
+            </div>
+        </template>
+        <div x-show="!referralCode" class="text-sm text-gray-500">Loading referral code...</div>
+        <div class="mt-4 flex justify-end">
+            <button @click="showReferralModal=false" class="px-4 py-2 text-sm text-gray-500 hover:text-gray-300">Close</button>
+        </div>
+    </div>
+</div>
+
 <!-- Sidebar (hidden on mobile) -->
 <aside @mouseenter="sidebarOpen=true" @mouseleave="sidebarOpen=false"
        :class="sidebarOpen ? 'w-56' : 'w-12'"
@@ -482,6 +506,10 @@ html{overflow:hidden;position:fixed;width:100%;height:100%}
                 <button @click="showApiKeyModal=true" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-gray-400 hover:bg-gray-800 hover:text-white transition" :class="!sidebarOpen && 'justify-center'" :title="sidebarOpen?'':'API Key'">
                     <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"/></svg>
                     <span x-show="sidebarOpen">API Key</span>
+                </button>
+                <button @click="showReferralModal=true; if(!referralCode){fetch('/api/my/referral',{credentials:'include'}).then(r=>r.json()).then(d=>{referralCode=d.referral_code||''}).catch(()=>{})}" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-gray-400 hover:bg-gray-800 hover:text-white transition" :class="!sidebarOpen && 'justify-center'" :title="sidebarOpen?'':'Referral'">
+                    <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"/></svg>
+                    <span x-show="sidebarOpen">Referral</span>
                 </button>
                 <div x-show="sidebarOpen" class="flex items-center gap-2 px-2.5 py-2 rounded-lg hover:bg-gray-800 transition">
                     <template x-if="user.avatar_url"><img :src="user.avatar_url" class="w-5 h-5 rounded-full shrink-0"></template>
@@ -1226,6 +1254,9 @@ function repolm() {
         // Concept Lab state
         showConceptLab: false,
         showApiKeyModal: false,
+        showReferralModal: false,
+        referralCode: '',
+        referralCopied: false,
         sidebarOpen: false,
         apiKey: null,
         apiKeyVisible: false,

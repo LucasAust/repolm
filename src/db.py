@@ -297,6 +297,15 @@ def init_db():
         );
         """)
 
+        # Shares persistence
+        conn.executescript("""
+        CREATE TABLE IF NOT EXISTS shares (
+            id TEXT PRIMARY KEY,
+            data TEXT NOT NULL,
+            created_at DOUBLE PRECISION DEFAULT (unixepoch())
+        );
+        """)
+
         # Share tracking
         conn.executescript("""
         CREATE TABLE IF NOT EXISTS share_counts (
@@ -1001,6 +1010,21 @@ def cleanup_expired_sessions():
     """Purge expired sessions."""
     with db() as conn:
         conn.execute("DELETE FROM sessions WHERE expires_at<? AND expires_at IS NOT NULL", (time.time(),))
+
+
+# ── Shares ──
+
+def save_share(share_id: str, data_json: str):
+    with db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO shares (id, data, created_at) VALUES (?,?,?)",
+            (share_id, data_json, time.time()))
+
+
+def get_share(share_id: str) -> Optional[str]:
+    with db() as conn:
+        row = conn.execute("SELECT data FROM shares WHERE id=?", (share_id,)).fetchone()
+        return row["data"] if row else None
 
 
 # Init on import

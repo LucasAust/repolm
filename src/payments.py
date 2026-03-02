@@ -80,7 +80,7 @@ async def create_checkout(request: Request):
         await db_async.update_subscription(user["id"], stripe_customer_id=customer_id)
 
     host = request.headers.get("host", "localhost")
-    scheme = "https" if "localhost" not in host else "http"
+    scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
     base_url = f"{scheme}://{host}"
 
     session = stripe.checkout.Session.create(
@@ -120,7 +120,7 @@ async def create_subscription(request: Request):
         await db_async.update_subscription(user["id"], stripe_customer_id=customer_id)
 
     host = request.headers.get("host", "localhost")
-    scheme = "https" if "localhost" not in host else "http"
+    scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
     base_url = f"{scheme}://{host}"
 
     session = stripe.checkout.Session.create(

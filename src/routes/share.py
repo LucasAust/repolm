@@ -15,11 +15,10 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.responses import Response
 
 import state
+import db_async
 
 router = APIRouter()
 
-# Rate limiting for share creation: {ip: [timestamps]}
-_share_rate: dict = defaultdict(list)
 _SHARE_MAX_PER_HOUR = 10
 _SHARE_MAX_CONTENT_BYTES = 500 * 1024  # 500 KB
 
@@ -46,19 +45,22 @@ async def create_share(request: Request):
     if len(content.encode("utf-8")) > _SHARE_MAX_CONTENT_BYTES:
         return JSONResponse({"error": "Content too large (max 500KB)"}, 400)
 
-    # Rate limit: max 10 shares per IP per hour
+    # Rate limit: max 10 shares per IP per hour (DB-backed, multi-worker safe)
     client_ip = _get_client_ip(request)
-    now = time.time()
-    _share_rate[client_ip] = [t for t in _share_rate[client_ip] if now - t < 3600]
-    if len(_share_rate[client_ip]) >= _SHARE_MAX_PER_HOUR:
+    is_limited = await db_async.check_rate_limit_db(
+        "share:" + client_ip, _SHARE_MAX_PER_HOUR, 3600
+    )
+    if is_limited:
         return JSONResponse({"error": "Too many shares. Please try again later."}, 429)
-    _share_rate[client_ip].append(now)
 
     short_id = str(uuid.uuid4())[:8]
-    state.shared_content.set(short_id, {
+    share_data = {
         "kind": kind, "content": content,
         "repo_name": repo_name, "created_at": time.time(),
-    })
+    }
+    state.shared_content.set(short_id, share_data)
+    # Persist to DB so shares survive restarts
+    await db_async.save_share(short_id, json.dumps(share_data))
     return {"share_id": short_id, "url": f"/share/{short_id}"}
 
 
@@ -66,6 +68,12 @@ async def create_share(request: Request):
 async def view_shared(share_id: str):
     """View shared content with full SEO."""
     item = state.shared_content.get(share_id)
+    if not item:
+        # Fallback: load from DB
+        row = await db_async.get_share(share_id)
+        if row:
+            item = json.loads(row)
+            state.shared_content.set(share_id, item)
     if not item:
         return HTMLResponse("<h1>Not found</h1>", status_code=404)
     kind = item["kind"]

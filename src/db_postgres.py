@@ -290,6 +290,14 @@ async def _create_tables():
         """)
 
         await conn.execute("""
+        CREATE TABLE IF NOT EXISTS shares (
+            id TEXT PRIMARY KEY,
+            data TEXT NOT NULL,
+            created_at DOUBLE PRECISION DEFAULT EXTRACT(EPOCH FROM NOW())
+        )
+        """)
+
+        await conn.execute("""
         CREATE TABLE IF NOT EXISTS share_counts (
             content_id TEXT PRIMARY KEY,
             platform TEXT,
@@ -909,6 +917,25 @@ async def update_email_preferences(user_id: int, **kwargs):
                 await conn.execute(
                     "UPDATE email_preferences SET {0}=$1, updated_at=$2 WHERE user_id=$3".format(key),
                     int(val), now, user_id)
+
+
+# ── Shares ──
+
+async def save_share(share_id: str, data_json: str):
+    pool = _get_pool()
+    now = time.time()
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            INSERT INTO shares (id, data, created_at) VALUES ($1, $2, $3)
+            ON CONFLICT (id) DO UPDATE SET data=$2, created_at=$3
+        """, share_id, data_json, now)
+
+
+async def get_share(share_id: str):
+    pool = _get_pool()
+    async with pool.acquire() as conn:
+        val = await conn.fetchval("SELECT data FROM shares WHERE id=$1", share_id)
+        return val
 
 
 # ── Share Tracking ──

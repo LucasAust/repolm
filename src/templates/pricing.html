@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#09090b">
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="apple-touch-icon" href="/static/favicon.svg">
-<meta name="description" content="RepoLM pricing. Start free with 10 tokens. Buy more when you need them. No subscriptions required.">
+<meta name="description" content="RepoLM pricing. Start free with 50 tokens. Buy more when you need them. No subscriptions required.">
 <meta property="og:title" content="Pricing — RepoLM">
 <meta property="og:description" content="Simple token pricing. Start free, pay as you go.">
 <script src="https://cdn.tailwindcss.com"></script>
@@ -36,7 +36,7 @@ body{background:#09090b;color:#e5e7eb;font-family:system-ui,-apple-system,sans-s
 <!-- Header -->
 <section class="max-w-4xl mx-auto px-6 pt-16 pb-12 text-center">
     <h1 class="text-4xl md:text-5xl font-bold mb-4">Pay as you go</h1>
-    <p class="text-xl text-gray-400 mb-3">Start free with 10 tokens. Buy more when you need them.</p>
+    <p class="text-xl text-gray-400 mb-3">Start free with 50 tokens. Buy more when you need them.</p>
     <p class="text-sm text-gray-500">No subscriptions. No commitments. Tokens never expire.</p>
 </section>
 
@@ -173,5 +173,23 @@ body{background:#09090b;color:#e5e7eb;font-family:system-ui,-apple-system,sans-s
     <span class="text-purple-400 font-semibold">Repo</span>LM — Powered by Gemini
 </footer>
 </div>
+<script>
+document.querySelectorAll('[data-pack]').forEach(function(btn){
+    btn.addEventListener('click', function(e){
+        e.preventDefault();
+        var pack = btn.getAttribute('data-pack');
+        fetch('/api/checkout', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin',
+            body: JSON.stringify({pack: pack})
+        }).then(function(r){ return r.json(); }).then(function(data){
+            if(data.url){ window.location.href = data.url; }
+            else if(data.error === 'Not authenticated'){ window.location.href = '/app?buy=' + pack; }
+            else { alert(data.error || 'Checkout failed'); }
+        }).catch(function(){ window.location.href = '/app?buy=' + pack; });
+    });
+});
+</script>
 </body>
 </html>
