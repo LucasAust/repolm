@@ -1329,6 +1329,21 @@ function repolm() {
                 window.history.replaceState({}, '', '/app');
                 setTimeout(() => { this.checkoutSuccess = false; this.refreshTokens(); }, 2000);
             }
+            // Auto-open token shop if redirected from pricing with buy param
+            var buyPack = params.get('buy');
+            if (buyPack) {
+                window.history.replaceState({}, '', '/app');
+                var self = this;
+                setTimeout(function(){
+                    if (self.user) {
+                        self.buyPack(buyPack);
+                    } else {
+                        self.showAuthModal = true;
+                        self.authMode = 'login';
+                        self._pendingBuyPack = buyPack;
+                    }
+                }, 500);
+            }
             // Onboarding tour for first-time visitors
             if (!localStorage.getItem('repolm_tour_done')) {
                 setTimeout(() => { this.showTour = true; }, 500);
@@ -1415,6 +1430,12 @@ function repolm() {
                 await this.checkAuth();
                 this.showAuthModal = false;
                 this.authLoading = false;
+                // If there was a pending buy from pricing page redirect
+                if (this._pendingBuyPack) {
+                    var pack = this._pendingBuyPack;
+                    this._pendingBuyPack = null;
+                    this.buyPack(pack);
+                }
                 return;
             } catch(e) { this.authError = 'Connection failed'; }
             this.authLoading = false;

@@ -30,9 +30,7 @@ def _require_admin(request: Request) -> bool:
 
 @router.get("/admin", response_class=HTMLResponse)
 async def admin_dashboard(request: Request):
-    """Admin dashboard page."""
-    if _require_admin(request):
-        return JSONResponse({"error": "Unauthorized"}, 401)
+    """Admin dashboard page. Served without auth — the page itself prompts for the API key."""
     return HTMLResponse(TEMPLATES_DIR.joinpath("admin.html").read_text())
 
 

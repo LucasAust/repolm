@@ -100,21 +100,6 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
 
-    # Close PostgreSQL pool
-    if os.environ.get("DATABASE_URL"):
-        try:
-            import db_postgres
-            await db_postgres.close_pool()
-        except Exception:
-            pass
-
-    # Close Redis
-    try:
-        import redis_client
-        await redis_client.close_redis()
-    except Exception:
-        pass
-
     try:
         await cleanup_task
     except asyncio.CancelledError:

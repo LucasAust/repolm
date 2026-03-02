@@ -6,7 +6,7 @@ Generate small teaching repos from concept descriptions using LLM.
 import json
 import re
 from typing import Optional
-from summarize import call_llm_stream
+from services.llm import call_llm_stream
 
 CONCEPT_LAB_SYSTEM = """You are RepoLM Concept Lab, an expert developer and educator.
 The user wants to learn a concept. Generate a small but COMPLETE codebase (3-8 files) that demonstrates it.
