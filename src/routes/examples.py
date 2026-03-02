@@ -16,6 +16,8 @@ router = APIRouter()
 @router.get("/api/examples")
 async def get_examples():
     examples = []
+    if not os.path.isdir(EXAMPLES_DIR):
+        return examples
     for fname in sorted(os.listdir(EXAMPLES_DIR)):
         if fname.endswith(".json"):
             with open(os.path.join(EXAMPLES_DIR, fname)) as f:
