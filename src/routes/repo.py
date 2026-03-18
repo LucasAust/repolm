@@ -18,7 +18,9 @@ from concurrency import ingest_queue, acquire_ingest
 from routes._helpers import check_rate_limit
 from services.ingestion import (
     ingest_repo, repo_to_text, should_skip_file, should_skip_dir,
-    detect_language, MAX_FILE_SIZE, MAX_TOTAL_CHARS, PRIORITY_FILES,
+    is_test_file, is_low_value, is_reexport_stub, detect_language,
+    MAX_FILE_SIZE, MAX_TOTAL_CHARS, MAX_TEST_CHARS,
+    PRIORITY_FILES, ENTRY_POINT_FILES, SOURCE_CODE_EXTENSIONS,
 )
 
 router = APIRouter()
@@ -103,7 +105,7 @@ def run_ingest(repo_id, url, webhook_url=None, api_key=None):
 
 
 def run_upload_ingest(repo_id, files_data):
-    """Process uploaded folder files. Runs in thread pool (sync is fine)."""
+    """Process uploaded folder files with smart scoring. Runs in thread pool."""
     from ingest import RepoFile, RepoData
     try:
         db_async.sync_update_job(repo_id, status="processing", message="Processing uploaded files...")
@@ -111,9 +113,8 @@ def run_upload_ingest(repo_id, files_data):
         paths = [f["path"] for f in files_data]
         folder_name = paths[0].split("/")[0] if paths and "/" in paths[0] else "uploaded-project"
 
-        processed = []
-        language_stats = {}
-        total_chars = 0
+        # Phase 1: Parse all files, decode content, apply basic filters
+        candidates = []
         skipped = 0
 
         for f in files_data:
@@ -137,30 +138,88 @@ def run_upload_ingest(repo_id, files_data):
             except (UnicodeDecodeError, AttributeError):
                 skipped += 1
                 continue
-            if total_chars + len(content) > MAX_TOTAL_CHARS:
+
+            basename = os.path.basename(rel_path)
+            ext = os.path.splitext(rel_path)[1].lower()
+            is_source = ext in SOURCE_CODE_EXTENSIONS
+            is_priority = basename in PRIORITY_FILES
+            is_entry = basename in ENTRY_POINT_FILES
+            is_test = is_test_file(rel_path)
+            low_value = is_low_value(rel_path)
+
+            # Skip tiny re-export stubs (barrel files, npm shims)
+            if is_source and len(content) < 1500 and is_reexport_stub(content):
                 skipped += 1
                 continue
 
-            is_priority = os.path.basename(rel_path) in PRIORITY_FILES
-            lang = detect_language(rel_path)
-            language_stats[lang] = language_stats.get(lang, 0) + 1
-
-            processed.append({
+            candidates.append({
                 "path": rel_path, "content": content,
                 "size": len(content), "is_priority": is_priority,
+                "is_entry": is_entry, "is_test": is_test,
+                "is_source": is_source, "low_value": low_value,
             })
-            total_chars += len(content)
 
-        processed.sort(key=lambda x: (not x["is_priority"], x["size"]))
+        # Phase 2: Score and rank files (same logic as git clone ingest)
+        # Only treat ROOT-level priority files as high priority (not nested package.json etc.)
+        def _is_root_priority(item):
+            return item["is_priority"] and "/" not in item["path"]
+
+        def file_sort_key(item):
+            if _is_root_priority(item):
+                tier = 0
+            elif item["is_entry"] and item["path"].count("/") <= 1:
+                tier = 1
+            elif item["is_source"] and not item["low_value"] and not item["is_test"]:
+                # Real source code — prefer shallow files
+                depth = item["path"].count("/")
+                tier = 2 + min(depth * 0.1, 0.9)
+            elif item["is_test"]:
+                tier = 5
+            elif item["low_value"]:
+                tier = 4.5
+            elif item["is_priority"]:
+                # Nested package.json/README — low priority
+                tier = 4
+            else:
+                tier = 3.5
+            # Within tier: prefer larger source files (more substance)
+            # but smaller config/meta files
+            size_score = -item["size"] if item["is_source"] else item["size"]
+            return (tier, size_score)
+
+        candidates.sort(key=file_sort_key)
+
+        # Phase 3: Select files within budget
+        processed = []
+        language_stats = {}
+        total_chars = 0
+        test_chars = 0
+
+        for item in candidates:
+            if total_chars >= MAX_TOTAL_CHARS:
+                skipped += 1
+                continue
+            if item["is_test"] and test_chars >= MAX_TEST_CHARS:
+                skipped += 1
+                continue
+            if total_chars + len(item["content"]) > MAX_TOTAL_CHARS:
+                skipped += 1
+                continue
+
+            lang = detect_language(item["path"])
+            language_stats[lang] = language_stats.get(lang, 0) + 1
+
+            processed.append(item)
+            total_chars += len(item["content"])
+            if item["is_test"]:
+                test_chars += len(item["content"])
 
         sections = ["# Project: {}".format(folder_name), "Files included: {} ({} skipped)".format(len(processed), skipped)]
         if language_stats:
             top = sorted(language_stats.items(), key=lambda x: -x[1])[:8]
             sections.append("Languages: {}".format(", ".join("{}: {}".format(l, c) for l, c in top)))
 
-        priority = [f for f in processed if f["is_priority"]]
-        regular = [f for f in processed if not f["is_priority"]]
-        for f in priority + regular:
+        for f in processed:
             ext = os.path.splitext(f["path"])[1].lstrip(".")
             sections.append('\n## {}\n```{}\n{}\n```'.format(f["path"], ext, f["content"]))
 
