@@ -78,7 +78,7 @@ def _api_ingest(owner: str, repo: str, url: str, progress_callback: Optional[Cal
     # Build simple directory tree string from API data
     tree_str = _build_api_tree(all_entries)
 
-    # Filter files (same logic as clone-based ingest)
+    # Filter files (same smart scoring as clone-based ingest)
     eligible = []
     for blob in blobs:
         path = blob["path"]
@@ -94,13 +94,18 @@ def _api_ingest(owner: str, repo: str, url: str, progress_callback: Optional[Cal
             continue
 
         basename = os.path.basename(path)
-        is_priority = basename in PRIORITY_FILES
-        is_entry = basename in ENTRY_POINT_FILES
+        ext = os.path.splitext(path)[1].lower()
+        # Only root-level files get priority (not packages/foo/package.json)
+        is_priority = basename in PRIORITY_FILES and "/" not in path
+        is_entry = basename in ENTRY_POINT_FILES and path.count("/") <= 1
         is_test = is_test_file(path)
+        is_source = ext in SOURCE_CODE_EXTENSIONS
+        low_value = is_low_value(path)
 
         eligible.append({
             "path": path, "size": size,
             "is_priority": is_priority, "is_entry": is_entry, "is_test": is_test,
+            "is_source": is_source, "low_value": low_value,
         })
 
         if len(eligible) >= MAX_FILES_TO_WALK:
@@ -109,17 +114,27 @@ def _api_ingest(owner: str, repo: str, url: str, progress_callback: Optional[Cal
     if progress_callback:
         progress_callback("processing", f"Analyzing {len(eligible)} files...")
 
-    # Score and sort (same logic as clone ingest but without import graph for speed)
+    # Score and sort — same logic as clone ingest
     def file_sort_key(item):
         if item["is_priority"]:
             tier = 0
         elif item["is_entry"]:
             tier = 1
+        elif item["is_source"] and not item["low_value"] and not item["is_test"]:
+            # Real source code — prefer shallow files
+            depth = item["path"].count("/")
+            tier = 2 + min(depth * 0.1, 0.9)
         elif item["is_test"]:
+            tier = 5
+        elif item["low_value"]:
+            tier = 4.5
+        elif not item["is_source"]:
             tier = 4
         else:
-            tier = 3
-        return (tier, item["size"])
+            tier = 3.5
+        # Within tier: prefer larger source files (more substance)
+        size_score = -item["size"] if item["is_source"] else item["size"]
+        return (tier, size_score)
 
     eligible.sort(key=file_sort_key)
 
@@ -157,7 +172,7 @@ def _api_ingest(owner: str, repo: str, url: str, progress_callback: Optional[Cal
         return path, None, file_info
 
     # Parallel fetch
-    fetched = []
+    test_chars_used = 0
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_PARALLEL_FETCHES) as pool:
         results = pool.map(fetch_one, to_fetch)
         for path, content, info in results:
@@ -169,6 +184,16 @@ def _api_ingest(owner: str, repo: str, url: str, progress_callback: Optional[Cal
                 skipped_summary.total += 1
                 skipped_summary.other += 1
                 continue
+            # Cap test files
+            if info["is_test"] and test_chars_used >= MAX_TEST_CHARS:
+                data.skipped_count += 1
+                skipped_summary.tests += 1
+                continue
+            # Skip barrel/re-export stubs
+            ext = os.path.splitext(path)[1].lower()
+            if ext in SOURCE_CODE_EXTENSIONS and len(content) < 1500 and is_reexport_stub(content):
+                data.skipped_count += 1
+                continue
 
             lang = detect_language(path)
             language_stats[lang] = language_stats.get(lang, 0) + 1
@@ -179,6 +204,8 @@ def _api_ingest(owner: str, repo: str, url: str, progress_callback: Optional[Cal
                 is_test=info["is_test"], import_score=0.0,
             ))
             data.total_chars += len(content)
+            if info["is_test"]:
+                test_chars_used += len(content)
 
     data.skipped_count += skipped_summary.total
     data.skipped_summary = skipped_summary
