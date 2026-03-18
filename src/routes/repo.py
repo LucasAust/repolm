@@ -142,7 +142,8 @@ def run_upload_ingest(repo_id, files_data):
             basename = os.path.basename(rel_path)
             ext = os.path.splitext(rel_path)[1].lower()
             is_source = ext in SOURCE_CODE_EXTENSIONS
-            is_priority = basename in PRIORITY_FILES
+            # Only root-level files get priority (not packages/foo/package.json)
+            is_priority = basename in PRIORITY_FILES and "/" not in rel_path
             is_entry = basename in ENTRY_POINT_FILES
             is_test = is_test_file(rel_path)
             low_value = is_low_value(rel_path)
@@ -160,12 +161,8 @@ def run_upload_ingest(repo_id, files_data):
             })
 
         # Phase 2: Score and rank files (same logic as git clone ingest)
-        # Only treat ROOT-level priority files as high priority (not nested package.json etc.)
-        def _is_root_priority(item):
-            return item["is_priority"] and "/" not in item["path"]
-
         def file_sort_key(item):
-            if _is_root_priority(item):
+            if item["is_priority"]:
                 tier = 0
             elif item["is_entry"] and item["path"].count("/") <= 1:
                 tier = 1
@@ -177,8 +174,8 @@ def run_upload_ingest(repo_id, files_data):
                 tier = 5
             elif item["low_value"]:
                 tier = 4.5
-            elif item["is_priority"]:
-                # Nested package.json/README — low priority
+            elif not item["is_source"]:
+                # Non-source files (config, docs, etc.) — low priority
                 tier = 4
             else:
                 tier = 3.5
