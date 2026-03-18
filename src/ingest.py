@@ -70,6 +70,21 @@ SKIP_EXTENSIONS = {
     ".exe", ".bin", ".dat", ".db", ".sqlite",
     ".lock", ".sum",  # lock files are noise
     ".min.js", ".min.css",  # minified
+    ".typed",  # py.typed marker files (0 bytes)
+}
+
+# Filenames to always skip (zero learning value)
+SKIP_FILENAMES = {
+    "LICENSE", "LICENSE.md", "LICENSE.txt", "LICENCE", "LICENCE.md",
+    "LICENSE-MIT", "LICENSE-APACHE", "COPYING", "COPYING.md",
+    ".gitignore", ".gitattributes", ".gitmodules",
+    ".dockerignore", ".editorconfig", ".flake8",
+    ".prettierignore", ".eslintignore", ".npmignore",
+    ".prettierrc", ".eslintrc", ".babelrc",
+    "py.typed", "Thumbs.db", ".DS_Store",
+    "CODEOWNERS", "AUTHORS", "AUTHORS.md",
+    "SECURITY.md", "FUNDING.yml",
+    "renovate.json", ".dependabot",
 }
 
 
@@ -184,6 +199,8 @@ def should_skip_file(filepath: str) -> bool:
     if ext.lower() in SKIP_EXTENSIONS:
         return True
     if name.endswith(".min.js") or name.endswith(".min.css"):
+        return True
+    if name in SKIP_FILENAMES:
         return True
     return False
 
